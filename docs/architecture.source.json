@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "向量检索服务 —— 系统架构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-vector-search-20261015-211224/vector-search.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "客户端",
+      "sublabel": "curl / 前端 demo",
+      "pos": [
+        30,
+        420
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "REST 接口层",
+      "sublabel": "SearchController",
+      "pos": [
+        240,
+        420
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "检索编排",
+      "sublabel": "SearchService",
+      "pos": [
+        480,
+        420
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "modelClient",
+      "type": "backend",
+      "label": "模型服务客户端",
+      "sublabel": "ModelServiceClient",
+      "pos": [
+        480,
+        260
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "indexMgr",
+      "type": "backend",
+      "label": "索引管理",
+      "sublabel": "VectorIndexManager",
+      "pos": [
+        730,
+        420
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "hnsw",
+      "type": "backend",
+      "label": "HNSW 索引引擎",
+      "sublabel": "自研 · 分层邻近图",
+      "pos": [
+        980,
+        420
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "docStore",
+      "type": "database",
+      "label": "文档原文存储",
+      "sublabel": "id 到文本映射",
+      "pos": [
+        480,
+        560
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "bruteForce",
+      "type": "backend",
+      "label": "暴力检索",
+      "sublabel": "正确性基准 · 对照组",
+      "pos": [
+        730,
+        560
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "distance",
+      "type": "backend",
+      "label": "距离计算",
+      "sublabel": "标量 / Vector API",
+      "pos": [
+        980,
+        560
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "modelService",
+      "type": "cloud",
+      "label": "FastAPI 模型服务",
+      "sublabel": "独立 Python 进程",
+      "tag": ":8000",
+      "pos": [
+        475,
+        80
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "batcher",
+      "type": "backend",
+      "label": "动态批处理",
+      "sublabel": "攒批后一次 forward",
+      "pos": [
+        715,
+        80
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "bge",
+      "type": "backend",
+      "label": "BGE-small-zh",
+      "sublabel": "512 维 · 已归一化",
+      "pos": [
+        945,
+        80
+      ],
+      "size": [
+        160,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Python 模型服务进程",
+      "wraps": [
+        "modelService",
+        "batcher",
+        "bge"
+      ],
+      "pad": 40
+    },
+    {
+      "kind": "region",
+      "label": "Java 检索服务进程（Spring Boot）",
+      "wraps": [
+        "api",
+        "service",
+        "modelClient",
+        "indexMgr",
+        "hnsw",
+        "docStore",
+        "bruteForce",
+        "distance"
+      ],
+      "pad": 40
+    }
+  ],
+  "connections": [
+    {
+      "id": "client-to-api",
+      "from": "client",
+      "to": "api",
+      "label": "HTTP JSON",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-service",
+      "from": "api",
+      "to": "service",
+      "label": "参数校验"
+    },
+    {
+      "id": "service-to-modelclient",
+      "from": "service",
+      "to": "modelClient",
+      "label": "编码",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "modelclient-to-modelservice",
+      "from": "modelClient",
+      "to": "modelService",
+      "label": "HTTP 批量 /embed",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "service-to-indexmgr",
+      "from": "service",
+      "to": "indexMgr",
+      "label": "检索"
+    },
+    {
+      "id": "indexmgr-to-hnsw",
+      "from": "indexMgr",
+      "to": "hnsw",
+      "label": "委托"
+    },
+    {
+      "id": "service-to-docstore",
+      "from": "service",
+      "to": "docStore",
+      "label": "回填原文",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "indexmgr-to-bruteforce",
+      "from": "indexMgr",
+      "to": "bruteForce",
+      "label": "对照组",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "variant": "dashed"
+    },
+    {
+      "id": "hnsw-to-distance",
+      "from": "hnsw",
+      "to": "distance",
+      "label": "SIMD 内积",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "modelservice-to-batcher",
+      "from": "modelService",
+      "to": "batcher",
+      "label": "入队"
+    },
+    {
+      "id": "batcher-to-bge",
+      "from": "batcher",
+      "to": "bge",
+      "label": "批量编码"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "一次检索的路径",
+      "items": [
+        "客户端 → REST 接口 → 检索编排 → 索引 → 回填原文",
+        "响应携带分阶段耗时（编码 / 检索），避免优化方向选错"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "跨进程边界：本项目的性能关键",
+      "items": [
+        "Java 与 Python 是两个独立进程，每次调用都是一次网络往返",
+        "/embed 从设计上就是批量接口，把 N 次往返压成 1 次",
+        "实测编码 25 到 38 ms，而索引检索不到 1 ms —— 瓶颈在这里"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "索引核心",
+      "items": [
+        "HNSW 从零实现：分层邻近图 / 贪心下降 / 启发式邻居选择",
+        "暴力检索既是正确性基准，也是所有性能数字的对照组",
+        "距离计算保留标量与 SIMD 双实现，收益可量化（4.97 倍）"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "尚未接入的部分（避免误读）",
+      "items": [
+        "BM25 + RRF 混合召回、Cross-Encoder 精排：已实现，未接入检索链路",
+        "堆外内存 / StampedLock 乐观读 / 索引持久化：计划中"
+      ]
+    }
+  ]
+}

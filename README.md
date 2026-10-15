@@ -396,6 +396,11 @@ vector-search/
 │   ├── REPORT.md                 #   自动生成的报告（脚本产物，勿手改）
 │   └── results/                  #   JMH JSON + 召回率 JSON（不入库）
 │
+├── docs/                         # ── 交给别人的东西 ──
+│   ├── architecture.html         #   系统架构图（可交互，直接打开）
+│   ├── architecture.source.json  #   图的源文件，改完可重新生成
+│   └── RESUME.md                 #   简历文案与面试问答
+│
 ├── data/
 │   ├── corpus/                   #   语料（示例已提供，可替换成你自己的资料）
 │   └── eval/                     #   构建好的评测集（不入库）
@@ -409,7 +414,9 @@ vector-search/
 
 | 产出 | 位置 | 生成方式 |
 |---|---|---|
+| **系统架构图** | `docs/architecture.html` | 可缩放 / 深浅色 / 导出图片，直接双击打开 |
 | 基准报告（数字来源） | `bench/REPORT.md` | `.\scripts\run_bench.ps1` |
+| 改造前后对比 | 终端输出 | `python scripts/compare_bench.py --before ... --after ...` |
 | 检索质量评测 | `bench/results/*.md` | `.\scripts\dev.ps1 eval` |
 | 简历文案 | `docs/RESUME.md` | 手工维护，数字引自基准报告 |
 | 技术博客草稿 | `docs/BLOG.md` | 手工维护 |
