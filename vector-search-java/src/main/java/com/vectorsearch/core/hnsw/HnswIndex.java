@@ -25,57 +25,75 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * 因此必须用 {@link com.vectorsearch.core.bruteforce.BruteForceIndex} 的结果当
  * ground truth 来量化 recall —— 否则"很快"是没有意义的。
  *
- * <h2>本版本是刻意的 v1（正确优先）</h2>
- * 为了给后续每一步优化留下可量化的对照组，这里<b>故意</b>用了朴素实现：
- * <ul>
- *   <li>向量存成 {@code List<float[]>} —— 对象头 + 指针跳转，第 3 周改扁平数组 + 堆外内存</li>
- *   <li>距离用标量 {@link DistanceMetrics} —— 第 5 周换 Vector API SIMD</li>
- *   <li>{@code visited} 用 {@code HashSet<Integer>} —— 每层查询都在装箱，第 3 周换 int 数组 + 版本号戳</li>
- *   <li>锁用 {@link ReentrantReadWriteLock} —— 第 6 周换 StampedLock 乐观读</li>
- * </ul>
- * 每一处替换都能单独跑出加速比，这些数字就是简历和面试里的弹药。
+ * <h2>存储布局：全部扁平化</h2>
+ *
+ * 最初每个节点用独立对象表示（{@code List<float[]>} + {@code List<int[][]>}）。
+ * 10 万节点时这会产生约 <b>30 万个对象</b>：每个 {@code float[]}、每个 {@code int[][]}、
+ * 每层一个 {@code int[]}，再加上 {@code List<Integer>} 的装箱。后果有两个：
+ * 一是遍历邻居时不停追指针，缓存命中率差；二是垃圾回收要管理海量小对象。
+ *
+ * <p>现在整个索引只有 <b>8 个数组</b>：
+ *
+ * <pre>
+ *   vectorStore    float[]  节点向量连续存放，第 i 条在 i*dimension 处
+ *   externalIdStore int[]   业务 id
+ *   levelStore     byte[]   层高（最大 32，一字节足够）
+ *   layer0Links    int[]    第 0 层邻接表，步长固定为 mMax0
+ *   layer0Count    short[]  第 0 层每个节点的邻居数
+ *   upperStore     int[]    第 1 层以上，按 (节点, 层) 紧凑打包
+ *   upperOffset    int[]    每个节点的上层槽位起点，-1 表示没有上层
+ *   visitedStamp   int[]    访问版本号戳
+ * </pre>
+ *
+ * <p><b>关键的兼容性问题</b>：扁平存储要求距离计算支持"数组 + 偏移量"而不是
+ * 两个独立数组，否则每算一次距离都得先把向量复制出来，扁平化就白做了。
+ * 这正是 {@link DistanceMetricsSimd#dot(float[], int, float[], int, int)} 存在的理由 ——
+ * 数据连续之后，SIMD 从整块大数组按偏移加载，比原来追引用跳转更友好。
+ *
+ * <h2>为什么不做堆外内存</h2>
+ * Java 21 的 {@code java.lang.foreign} 仍是<b>预览特性</b>，用它会要求
+ * {@code --enable-preview} 并把项目锁死在特定 JDK 版本上。
+ * 而绕过它的方案（直接 {@code ByteBuffer}）无法配合 Vector API 的
+ * {@code fromArray}，只能退化回标量距离 —— 那会丢掉 5.3 倍的 SIMD 收益，
+ * 得不偿失。所以当前选择是「扁平 + SIMD」，堆外留待 JDK 22+ 之后再做。
+ * 这个取舍本身比硬塞一个半成品堆外实现更值得说。
  *
  * <h2>并发模型</h2>
  * 读（{@link #search}）加读锁，可并发；写（{@link #add}）加写锁，独占。
- * 典型用法是离线构建、在线查询，因此读多写少。
  */
 public class HnswIndex implements VectorIndex {
 
-    /** visitedStamp 的初始容量，之后按节点数翻倍增长。 */
+    /** 初始容量，之后按需翻倍。 */
     private static final int INITIAL_CAPACITY = 1024;
+
+    /** 上层邻接表的初始容量（int 个数）。 */
+    private static final int INITIAL_UPPER_STORE = 4096;
 
     private final int dimension;
     private final HnswParams params;
     private final Random random;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    // ---------- 节点存储 ----------
-    /** 内部节点的归一化向量，下标即内部 id。 */
-    private final List<float[]> vectors = new ArrayList<>();
-    /** 内部 id → 业务 id。 */
-    private final List<Integer> externalIds = new ArrayList<>();
-    /** links[node][layer] = 该节点在第 layer 层的邻居（内部 id 数组）。 */
-    private final List<int[][]> links = new ArrayList<>();
-    /** 每个节点的最高层号。 */
-    private final List<Integer> levels = new ArrayList<>();
+    // ---------- 扁平存储 ----------
+    private float[] vectorStore;
+    private int[] externalIdStore;
+    private byte[] levelStore;
+    private int[] layer0Links;
+    private short[] layer0Count;
+    private int[] upperStore;
+    private int[] upperOffset;
+    private int upperStoreSize;
+    private int[] visitedStamp;
 
-    // ---------- 访问标记（版本号戳） ----------
-    /**
-     * visitedStamp[node] == 当前 token 表示"本轮搜索已访问过该节点"。
-     *
-     * <p>取代 {@code HashSet<Integer>}：后者在每次 searchLayer 里都要
-     * 装箱（每个邻居一个 Integer 对象）、算哈希、分配桶数组，而且每轮都要重新建。
-     * 版本号戳把这些全部消掉 —— 标记就是写一个 int，判断就是比一个 int。
-     * 建图和查询都跑在热路径上，这个改动的收益很直接。
-     */
-    private int[] visitedStamp = new int[INITIAL_CAPACITY];
-
-    /** 当前搜索轮次的令牌。0 是保留值，表示"未访问"。 */
-    private int visitToken = 0;
+    private int capacity;
+    private int nodeCount;
 
     // ---------- 图入口 ----------
     private int entryPoint = -1;
     private int maxLevel = -1;
+
+    /** 当前搜索轮次的令牌。0 是保留值，表示"未访问"。 */
+    private int visitToken;
 
     public HnswIndex(int dimension, HnswParams params) {
         this(dimension, params, 42L);
@@ -89,9 +107,129 @@ public class HnswIndex implements VectorIndex {
         if (dimension <= 0) {
             throw new IllegalArgumentException("dimension 必须为正数: " + dimension);
         }
+        if (params.mMax0() > Short.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                    "m 过大，第 0 层邻居数 " + params.mMax0() + " 超出 short 表示范围");
+        }
         this.dimension = dimension;
         this.params = params;
         this.random = new Random(seed);
+        this.capacity = INITIAL_CAPACITY;
+        allocate(capacity);
+    }
+
+    // =====================================================================
+    // 容量管理
+    // =====================================================================
+
+    private void allocate(int newCapacity) {
+        this.capacity = newCapacity;
+        this.vectorStore = new float[newCapacity * dimension];
+        this.externalIdStore = new int[newCapacity];
+        this.levelStore = new byte[newCapacity];
+        this.layer0Links = new int[newCapacity * params.mMax0()];
+        this.layer0Count = new short[newCapacity];
+        this.upperOffset = new int[newCapacity];
+        Arrays.fill(this.upperOffset, -1);
+        this.visitedStamp = new int[newCapacity];
+        this.upperStore = new int[INITIAL_UPPER_STORE];
+        this.upperStoreSize = 0;
+    }
+
+    private void ensureCapacity(int required) {
+        if (required <= capacity) {
+            return;
+        }
+        int newCapacity = Math.max(required, capacity * 2);
+
+        // 步长固定，整块拷贝即可
+        float[] newVectors = new float[newCapacity * dimension];
+        System.arraycopy(vectorStore, 0, newVectors, 0, nodeCount * dimension);
+        vectorStore = newVectors;
+
+        int[] newLayer0 = new int[newCapacity * params.mMax0()];
+        System.arraycopy(layer0Links, 0, newLayer0, 0, nodeCount * params.mMax0());
+        layer0Links = newLayer0;
+
+        externalIdStore = Arrays.copyOf(externalIdStore, newCapacity);
+        levelStore = Arrays.copyOf(levelStore, newCapacity);
+        layer0Count = Arrays.copyOf(layer0Count, newCapacity);
+        visitedStamp = Arrays.copyOf(visitedStamp, newCapacity);
+
+        int[] newUpperOffset = Arrays.copyOf(upperOffset, newCapacity);
+        Arrays.fill(newUpperOffset, capacity, newCapacity, -1);
+        upperOffset = newUpperOffset;
+
+        capacity = newCapacity;
+    }
+
+    private void ensureUpperStore(int required) {
+        if (required <= upperStore.length) {
+            return;
+        }
+        upperStore = Arrays.copyOf(upperStore, Math.max(required, upperStore.length * 2));
+    }
+
+    // =====================================================================
+    // 邻接表读写（把两种布局的差异收敛在这四个方法里）
+    // =====================================================================
+
+    private int neighborCount(int node, int layer) {
+        if (layer == 0) {
+            return layer0Count[node];
+        }
+        int offset = upperOffset[node];
+        if (offset < 0) {
+            return 0;
+        }
+        return upperStore[offset + (layer - 1) * (params.m() + 1)];
+    }
+
+    private int neighborAt(int node, int layer, int index) {
+        if (layer == 0) {
+            return layer0Links[node * params.mMax0() + index];
+        }
+        return upperStore[upperOffset[node] + (layer - 1) * (params.m() + 1) + 1 + index];
+    }
+
+    private void appendNeighbor(int node, int layer, int count, int target) {
+        if (layer == 0) {
+            layer0Links[node * params.mMax0() + count] = target;
+            layer0Count[node] = (short) (count + 1);
+        } else {
+            int slot = upperOffset[node] + (layer - 1) * (params.m() + 1);
+            upperStore[slot] = count + 1;
+            upperStore[slot + 1 + count] = target;
+        }
+    }
+
+    private void setNeighbors(int node, int layer, int[] neighbors) {
+        if (layer == 0) {
+            System.arraycopy(neighbors, 0, layer0Links, node * params.mMax0(), neighbors.length);
+            layer0Count[node] = (short) neighbors.length;
+            return;
+        }
+        int slot = upperOffset[node] + (layer - 1) * (params.m() + 1);
+        upperStore[slot] = neighbors.length;
+        System.arraycopy(neighbors, 0, upperStore, slot + 1, neighbors.length);
+    }
+
+    // =====================================================================
+    // 距离
+    // =====================================================================
+
+    /** query 是一段独立缓冲（从偏移量 queryOffset 开始），与扁平存储中的节点比。 */
+    private float similarity(float[] query, int queryOffset, int nodeId) {
+        // 用 SIMD：距离计算是建图与查询的绝对热点。
+        // 512 维下实测 61.3ns vs 标量 326.6ns（见 bench/REPORT.md）。
+        return DistanceMetricsSimd.dot(
+                query, queryOffset, vectorStore, nodeId * dimension, dimension);
+    }
+
+    /** 两个节点之间比。 */
+    private float similarityNodes(int nodeA, int nodeB) {
+        return DistanceMetricsSimd.dot(
+                vectorStore, nodeA * dimension, vectorStore, nodeB * dimension, dimension);
     }
 
     // =====================================================================
@@ -110,20 +248,31 @@ public class HnswIndex implements VectorIndex {
     }
 
     private void insertLocked(int externalId, float[] vector) {
-        float[] v = DistanceMetrics.normalizedCopy(vector);
-        int nodeId = vectors.size();
+        ensureCapacity(nodeCount + 1);
+
+        int nodeId = nodeCount;
         int level = randomLevel();
+        int vectorOffset = nodeId * dimension;
 
-        vectors.add(v);
-        externalIds.add(externalId);
-        levels.add(level);
+        // 向量直接写进扁平存储，就地归一化 —— 不产生任何临时数组
+        System.arraycopy(vector, 0, vectorStore, vectorOffset, dimension);
+        DistanceMetrics.normalizeInPlace(vectorStore, vectorOffset, dimension);
 
-        int[][] nodeLinks = new int[level + 1][];
-        for (int l = 0; l <= level; l++) {
-            nodeLinks[l] = new int[0];
+        externalIdStore[nodeId] = externalId;
+        levelStore[nodeId] = (byte) level;
+        layer0Count[nodeId] = 0;
+        upperOffset[nodeId] = -1;
+
+        // 上层槽位一次性预留：每个 (节点, 层) 占 m+1 个 int（第 0 个存邻居数）
+        if (level >= 1) {
+            int slotSize = level * (params.m() + 1);
+            ensureUpperStore(upperStoreSize + slotSize);
+            Arrays.fill(upperStore, upperStoreSize, upperStoreSize + slotSize, 0);
+            upperOffset[nodeId] = upperStoreSize;
+            upperStoreSize += slotSize;
         }
-        links.add(nodeLinks);
-        ensureVisitedCapacity(nodeId + 1);
+
+        nodeCount++;
 
         // 第一个节点：直接成为入口，没有图可走
         if (entryPoint == -1) {
@@ -132,39 +281,39 @@ public class HnswIndex implements VectorIndex {
             return;
         }
 
+        // 查询就是刚写进存储的这个节点本身，用偏移量指过去
+        float[] query = vectorStore;
+        int queryOffset = vectorOffset;
+
         int current = entryPoint;
-        float currentSim = similarity(v, current);
+        float currentSim = similarity(query, queryOffset, current);
 
         // ---- 阶段 1：从顶层贪心下降到 level+1 层 ----
-        // 上层图稀疏，用 ef=1 的贪心就够，目的是快速逼近目标区域
         for (int l = maxLevel; l > level; l--) {
-            current = greedyDescend(v, current, currentSim, l);
-            currentSim = similarity(v, current);
+            current = greedyDescend(query, queryOffset, current, currentSim, l);
+            currentSim = similarity(query, queryOffset, current);
         }
 
         // ---- 阶段 2：从 min(level, maxLevel) 层逐层下降，边搜边连 ----
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
-            List<SearchResult> candidates = searchLayer(v, current, params.efConstruction(), l);
+            List<SearchResult> candidates =
+                    searchLayer(query, queryOffset, current, params.efConstruction(), l);
             int maxLinks = params.maxLinks(l);
 
-            // 用启发式而非"最近的 m 个"：优先保留方向分散的邻居，
-            // 否则邻居全挤在同一侧，查询时容易走进局部最优出不来
-            int[] neighbors = selectNeighborsHeuristic(v, candidates, maxLinks);
-            links.get(nodeId)[l] = neighbors;
+            int[] neighbors = selectNeighborsHeuristic(query, queryOffset, candidates, maxLinks);
+            setNeighbors(nodeId, l, neighbors);
 
-            // 建立反向边。注意反向边可能因为超出上限而被剪枝，
-            // 这是 HNSW 的正常行为：边的存在不保证双向对称
+            // 建立反向边。反向边可能因超出上限被剪枝，这是 HNSW 的正常行为
             for (int neighbor : neighbors) {
                 addLink(neighbor, l, nodeId);
             }
 
             if (!candidates.isEmpty()) {
                 current = candidates.get(0).id();
-                currentSim = similarity(v, current);
+                currentSim = similarity(query, queryOffset, current);
             }
         }
 
-        // 新节点层高超过当前最高层时，它成为新的入口点
         if (level > maxLevel) {
             maxLevel = level;
             entryPoint = nodeId;
@@ -172,14 +321,16 @@ public class HnswIndex implements VectorIndex {
     }
 
     /** 在指定层贪心走到局部最优。用于上层快速逼近。 */
-    private int greedyDescend(float[] query, int start, float startSim, int layer) {
+    private int greedyDescend(float[] query, int queryOffset, int start, float startSim, int layer) {
         int current = start;
         float currentSim = startSim;
         boolean improved = true;
         while (improved) {
             improved = false;
-            for (int neighbor : links.get(current)[layer]) {
-                float sim = similarity(query, neighbor);
+            int count = neighborCount(current, layer);
+            for (int i = 0; i < count; i++) {
+                int neighbor = neighborAt(current, layer, i);
+                float sim = similarity(query, queryOffset, neighbor);
                 if (sim > currentSim) {
                     currentSim = sim;
                     current = neighbor;
@@ -197,28 +348,30 @@ public class HnswIndex implements VectorIndex {
      * 启发式，保持方向多样性。这是 HNSW 质量的关键细节，也是常见实现错误。
      */
     private void addLink(int node, int layer, int target) {
-        int[] current = links.get(node)[layer];
-        for (int existing : current) {
-            if (existing == target) {
+        int count = neighborCount(node, layer);
+        for (int i = 0; i < count; i++) {
+            if (neighborAt(node, layer, i) == target) {
                 return; // 边已存在
             }
         }
 
         int maxLinks = params.maxLinks(layer);
-        if (current.length < maxLinks) {
-            int[] next = Arrays.copyOf(current, current.length + 1);
-            next[current.length] = target;
-            links.get(node)[layer] = next;
+        if (count < maxLinks) {
+            appendNeighbor(node, layer, count, target);
             return;
         }
 
-        float[] nodeVec = vectors.get(node);
-        List<SearchResult> candidates = new ArrayList<>(current.length + 1);
-        for (int existing : current) {
-            candidates.add(new SearchResult(existing, similarity(nodeVec, existing)));
+        List<SearchResult> candidates = new ArrayList<>(count + 1);
+        for (int i = 0; i < count; i++) {
+            int existing = neighborAt(node, layer, i);
+            candidates.add(new SearchResult(existing, similarityNodes(node, existing)));
         }
-        candidates.add(new SearchResult(target, similarity(nodeVec, target)));
-        links.get(node)[layer] = selectNeighborsHeuristic(nodeVec, candidates, maxLinks);
+        candidates.add(new SearchResult(target, similarityNodes(node, target)));
+
+        // 剪枝的"查询点"就是这个节点自己
+        int[] pruned = selectNeighborsHeuristic(
+                vectorStore, node * dimension, candidates, maxLinks);
+        setNeighbors(node, layer, pruned);
     }
 
     // =====================================================================
@@ -231,7 +384,6 @@ public class HnswIndex implements VectorIndex {
         if (k <= 0) {
             return List.of();
         }
-        float[] q = DistanceMetrics.normalizedCopy(query);
 
         lock.readLock().lock();
         try {
@@ -239,25 +391,28 @@ public class HnswIndex implements VectorIndex {
                 return List.of();
             }
 
+            // 归一化到临时缓冲，不改动调用方的数组。
+            // 这是一次 2KB 的分配，相对微秒级的检索开销可以忽略
+            float[] normalized = DistanceMetrics.normalizedCopy(query);
+
             int current = entryPoint;
-            float currentSim = similarity(q, current);
+            float currentSim = similarity(normalized, 0, current);
 
             // 上层：ef=1 的贪心下降，只找方向
             for (int l = maxLevel; l > 0; l--) {
-                current = greedyDescend(q, current, currentSim, l);
-                currentSim = similarity(q, current);
+                current = greedyDescend(normalized, 0, current, currentSim, l);
+                currentSim = similarity(normalized, 0, current);
             }
 
             // 第 0 层：用 efSearch 的候选池做真正的收敛
-            // ef 至少要 >= k，否则候选池比要的条数还少，结果必然缺
             int ef = Math.max(efSearch, k);
-            List<SearchResult> candidates = searchLayer(q, current, ef, 0);
+            List<SearchResult> candidates = searchLayer(normalized, 0, current, ef, 0);
 
             int take = Math.min(k, candidates.size());
             List<SearchResult> result = new ArrayList<>(take);
             for (int i = 0; i < take; i++) {
                 SearchResult hit = candidates.get(i);
-                result.add(new SearchResult(externalIds.get(hit.id()), hit.score()));
+                result.add(new SearchResult(externalIdStore[hit.id()], hit.score()));
             }
             return result;
         } finally {
@@ -275,24 +430,22 @@ public class HnswIndex implements VectorIndex {
      *       用于 O(1) 判断新候选值不值得收、以及淘汰谁</li>
      * </ul>
      *
-     * <p>终止条件：弹出来的候选比"已保留结果里最差的"还差，
-     * 说明前沿已经没有希望，可以停。
+     * <p>终止条件：弹出来的候选比"已保留结果里最差的"还差，说明前沿已经没有希望。
      *
      * @param entry 起始节点（必须是第 layer 层存在的节点）
      */
-    private List<SearchResult> searchLayer(float[] query, int entry, int ef, int layer) {
-        // 版本号戳：本轮搜索的令牌。写 token 即"已访问"，读 token 即"访问过"。
+    private List<SearchResult> searchLayer(float[] query, int queryOffset,
+                                           int entry, int ef, int layer) {
+        // 版本号戳：写 token 即"已访问"，读 token 即"访问过"。
         // 取代 HashSet<Integer>，省掉全部装箱、哈希与每轮重建。
         int token = nextVisitToken();
 
-        // 大顶堆：堆顶 = 最近的候选
         PriorityQueue<SearchResult> candidates =
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score).reversed());
-        // 小顶堆：堆顶 = 已保留结果里最差的
         PriorityQueue<SearchResult> result =
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score));
 
-        SearchResult start = new SearchResult(entry, similarity(query, entry));
+        SearchResult start = new SearchResult(entry, similarity(query, queryOffset, entry));
         visitedStamp[entry] = token;
         candidates.offer(start);
         result.offer(start);
@@ -301,29 +454,27 @@ public class HnswIndex implements VectorIndex {
             SearchResult nearest = candidates.poll();
             SearchResult worstKept = result.peek();
 
-            // nearest 已经比已保留的最差还差 —— 前沿无望，收工
             if (worstKept != null && nearest.score() < worstKept.score()) {
                 break;
             }
 
-            for (int neighbor : links.get(nearest.id())[layer]) {
+            int count = neighborCount(nearest.id(), layer);
+            for (int i = 0; i < count; i++) {
+                int neighbor = neighborAt(nearest.id(), layer, i);
                 if (visitedStamp[neighbor] == token) {
                     continue;
                 }
                 visitedStamp[neighbor] = token;
-                float sim = similarity(query, neighbor);
+
+                float sim = similarity(query, queryOffset, neighbor);
                 SearchResult candidate = new SearchResult(neighbor, sim);
                 SearchResult currentWorst = result.peek();
 
-                boolean worthKeeping = result.size() < ef
-                        || currentWorst == null
-                        || sim > currentWorst.score();
-
-                if (worthKeeping) {
+                if (result.size() < ef || currentWorst == null || sim > currentWorst.score()) {
                     candidates.offer(candidate);
                     result.offer(candidate);
                     if (result.size() > ef) {
-                        result.poll(); // 淘汰最差的
+                        result.poll();
                     }
                 }
             }
@@ -344,22 +495,23 @@ public class HnswIndex implements VectorIndex {
      * <p><b>为什么不能直接取最近的 m 个</b>：那样邻居会聚在同一个方向，
      * 查询时容易一头扎进局部最优出不来。这里加了多样性约束 ——
      * 只有当候选 {@code e} 距离查询点<b>比距离任一已选邻居都更近</b>时才收它。
-     * 直觉上就是"这个新邻居提供了别人提供不了的方向"。
      *
-     * <p>不足 {@code m} 时用被丢弃的候选中最近的补齐（论文的
+     * <p>不足 {@code m} 时用被丢弃候选中最近的补齐（论文的
      * {@code keepPrunedConnections}），保证图上连通度不至于太差。
      *
-     * @param query      查询（或建图时的新节点）向量
-     * @param candidates 候选，可乱序
-     * @param m          最多选几个
+     * @param query       查询向量所在的数组
+     * @param queryOffset 查询向量在该数组中的起始下标
+     * @param candidates  候选（id 是内部节点号，score 是与 query 的相似度）
+     * @param m           最多选几个
      */
-    private int[] selectNeighborsHeuristic(float[] query, List<SearchResult> candidates, int m) {
+    private int[] selectNeighborsHeuristic(float[] query, int queryOffset,
+                                           List<SearchResult> candidates, int m) {
         if (candidates.isEmpty() || m <= 0) {
             return new int[0];
         }
 
         List<SearchResult> sorted = new ArrayList<>(candidates);
-        sorted.sort(Comparator.comparingDouble(SearchResult::score).reversed()); // 最近在前
+        sorted.sort(Comparator.comparingDouble(SearchResult::score).reversed());
 
         List<Integer> selected = new ArrayList<>(m);
         List<Integer> discarded = new ArrayList<>();
@@ -372,9 +524,9 @@ public class HnswIndex implements VectorIndex {
 
             boolean addsNewDirection = true;
             for (int chosen : selected) {
-                // candidate 与已选邻居的相似度，若高于它与 query 的相似度，
+                // candidate 与已选邻居的相似度若高于它与 query 的相似度，
                 // 说明它已经被已选邻居"覆盖"了，收进来只是冗余
-                float simToChosen = similarity(vectors.get(candidate.id()), chosen);
+                float simToChosen = similarityNodes(candidate.id(), chosen);
                 if (simToChosen > candidate.score()) {
                     addsNewDirection = false;
                     break;
@@ -412,8 +564,8 @@ public class HnswIndex implements VectorIndex {
      *
      * <p>版本号戳的关键在于"不用清空数组"：只要换一个令牌，
      * 上一轮的标记自然就全部失效了。代价是 int 会耗尽 ——
-     * 真到 21 亿次搜索时把数组清零并从头开始即可，实际不可能触发，
-     * 但必须处理，否则会变成静默的漏访问（把没访问过的节点当成访问过）。
+     * 真到 21 亿次搜索时把数组清零并从头开始，实际不可能触发，
+     * 但必须处理，否则会变成静默的漏访问。
      */
     private int nextVisitToken() {
         if (++visitToken == Integer.MAX_VALUE) {
@@ -421,13 +573,6 @@ public class HnswIndex implements VectorIndex {
             visitToken = 1;
         }
         return visitToken;
-    }
-
-    private void ensureVisitedCapacity(int required) {
-        if (required > visitedStamp.length) {
-            visitedStamp = Arrays.copyOf(visitedStamp,
-                    Math.max(required, visitedStamp.length * 2));
-        }
     }
 
     /**
@@ -441,14 +586,6 @@ public class HnswIndex implements VectorIndex {
         }
         int level = (int) Math.floor(-Math.log(r) * params.levelMultiplier());
         return Math.min(level, HnswParams.MAX_LEVEL_CAP);
-    }
-
-    /** 向量已归一化，所以内积就是余弦相似度。 */
-    private float similarity(float[] query, int nodeId) {
-        // 用 SIMD 而不是标量：距离计算是建图与查询的绝对热点，
-        // 512 维下标量 233ns / SIMD 36ns（JMH 实测，见 bench/REPORT.md）。
-        // 这直接决定 10 万点建图是几分钟还是十几分钟。
-        return DistanceMetricsSimd.dot(query, vectors.get(nodeId));
     }
 
     private void validate(float[] vector) {
@@ -467,7 +604,7 @@ public class HnswIndex implements VectorIndex {
 
     @Override
     public int size() {
-        return vectors.size();
+        return nodeCount;
     }
 
     @Override
@@ -489,24 +626,33 @@ public class HnswIndex implements VectorIndex {
         return maxLevel;
     }
 
-    /** 指定节点的最高层号，用于验证层高分布是否符合几何分布。 */
+    /** 指定节点的最高层号。 */
     public int levelOf(int nodeId) {
         lock.readLock().lock();
         try {
-            return levels.get(nodeId);
+            return levelStore[nodeId];
         } finally {
             lock.readLock().unlock();
         }
     }
 
-    /** 全图总边数（含各层，反向边单独计数），用于估算内存占用。 */
+    /** 全图总边数（含各层，反向边单独计数）。 */
     public long totalLinkCount() {
         lock.readLock().lock();
         try {
             long total = 0;
-            for (int[][] nodeLinks : links) {
-                for (int[] layerLinks : nodeLinks) {
-                    total += layerLinks.length;
+            for (int node = 0; node < nodeCount; node++) {
+                total += layer0Count[node];
+            }
+            int stride = params.m() + 1;
+            for (int node = 0; node < nodeCount; node++) {
+                int offset = upperOffset[node];
+                if (offset < 0) {
+                    continue;
+                }
+                int levels = levelStore[node];
+                for (int l = 1; l <= levels; l++) {
+                    total += upperStore[offset + (l - 1) * stride];
                 }
             }
             return total;
@@ -516,20 +662,17 @@ public class HnswIndex implements VectorIndex {
     }
 
     /**
-     * 各层「最高层恰好是本层」的节点数。index 即层号。
-     *
-     * <p>这是<b>层高分布</b>，用来验证随机层高的抽样是否正确（应服从几何分布）。
+     * 各层「最高层恰好是本层」的节点数（层高分布）。index 即层号。
      *
      * <p>注意它与 {@link #layerPopulation()} 的区别：本方法数的是
      * 「最高层正好是 l」，而 layerPopulation 数的是「至少达到 l 层」。
-     * 描述金字塔结构时要用后者。这两个量混淆是很容易犯的错。
      */
     public int[] levelHistogram() {
         lock.readLock().lock();
         try {
             int[] histogram = new int[maxLevel + 1];
-            for (int level : levels) {
-                histogram[level]++;
+            for (int node = 0; node < nodeCount; node++) {
+                histogram[levelStore[node]]++;
             }
             return histogram;
         } finally {
@@ -541,15 +684,14 @@ public class HnswIndex implements VectorIndex {
      * 各层实际「存在」的节点数（累计口径）。index 即层号。
      *
      * <p>HNSW 中每个节点都存在于从 0 到它自身层高的<b>所有</b>层，
-     * 所以 population[0] 恒等于总节点数，且逐层递减。
-     * 这才是"金字塔"的真实形状。
+     * 所以 population[0] 恒等于总节点数，且逐层递减。这是金字塔的真实形状。
      */
     public int[] layerPopulation() {
         lock.readLock().lock();
         try {
             int[] population = new int[maxLevel + 1];
-            for (int level : levels) {
-                for (int l = 0; l <= level; l++) {
+            for (int node = 0; node < nodeCount; node++) {
+                for (int l = 0; l <= levelStore[node]; l++) {
                     population[l]++;
                 }
             }
@@ -557,5 +699,33 @@ public class HnswIndex implements VectorIndex {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    /**
+     * 存储占用估算（字节）。
+     *
+     * <p>这是<b>估算</b>，只统计 8 个数组本身，不含对象头与对齐填充。
+     * 它的价值在于和改造前的对象化布局做对比：那时 10 万节点会产生
+     * 约 30 万个对象，现在的对象数是常数级。
+     */
+    public long estimatedBytes() {
+        lock.readLock().lock();
+        try {
+            return (long) capacity * dimension * Float.BYTES
+                    + (long) capacity * Integer.BYTES      // externalIdStore
+                    + (long) capacity                       // levelStore
+                    + (long) capacity * params.mMax0() * Integer.BYTES
+                    + (long) capacity * Short.BYTES         // layer0Count
+                    + (long) capacity * Integer.BYTES       // upperOffset
+                    + (long) upperStoreSize * Integer.BYTES
+                    + (long) capacity * Integer.BYTES;      // visitedStamp
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /** 当前已分配的节点槽位数（容量），用于观察扩容行为。 */
+    public int capacity() {
+        return capacity;
     }
 }

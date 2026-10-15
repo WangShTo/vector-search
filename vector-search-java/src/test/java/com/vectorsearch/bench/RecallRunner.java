@@ -110,18 +110,31 @@ public final class RecallRunner {
 
         // ---------- HNSW ----------
         System.out.printf("%n[2/3] 构建 HNSW 索引（m=%d, efConstruction=%d）%n", m, efConstruction);
+
+        // 建图前后各测一次堆占用，用来量化存储布局改造的效果。
+        // 先做几轮 GC 让测量点尽量干净 —— 这是粗测，但足以反映数量级差异。
+        long heapBefore = usedHeapBytes();
+
         HnswIndex hnsw = new HnswIndex(dimension, HnswParams.of(m, efConstruction), seed);
         long hnswBuildStart = System.nanoTime();
         for (int i = 0; i < dataset.size(); i++) {
             hnsw.add(i, dataset.vectors()[i]);
         }
         long hnswBuildMillis = (System.nanoTime() - hnswBuildStart) / 1_000_000L;
+
+        long heapAfter = usedHeapBytes();
+        long heapDelta = heapAfter - heapBefore;
+
         double speedupOfBuild = (double) hnswBuildMillis / Math.max(1, bfBuildMillis);
         System.out.printf("      建图耗时 %d ms（是暴力建库的 %.2f 倍）%n",
                 hnswBuildMillis, speedupOfBuild);
         System.out.printf("      最大层=%d  总边数=%d  单点平均出边=%.1f%n",
                 hnsw.maxLevel(), hnsw.totalLinkCount(),
                 (double) hnsw.totalLinkCount() / Math.max(1, nodeCount));
+        System.out.printf("      堆内占用增量 %.1f MB（估算 %.1f MB），容量 %d 个节点槽位%n",
+                heapDelta / 1024.0 / 1024.0,
+                hnsw.estimatedBytes() / 1024.0 / 1024.0,
+                hnsw.capacity());
 
         // ---------- 扫描 efSearch ----------
         System.out.printf("%n[3/3] 扫描 efSearch，测 recall@%d 与延迟%n%n", topK);
@@ -188,6 +201,9 @@ public final class RecallRunner {
 
         Map<String, Object> hnswStats = new LinkedHashMap<>();
         hnswStats.put("buildMillis", hnswBuildMillis);
+        hnswStats.put("heapDeltaBytes", heapDelta);
+        hnswStats.put("estimatedBytes", hnsw.estimatedBytes());
+        hnswStats.put("capacity", hnsw.capacity());
         hnswStats.put("maxLevel", hnsw.maxLevel());
         hnswStats.put("totalLinks", hnsw.totalLinkCount());
         hnswStats.put("averageDegree", round((double) hnsw.totalLinkCount() / Math.max(1, nodeCount), 1));
@@ -223,8 +239,28 @@ public final class RecallRunner {
                 .toArray();
     }
 
-    private static Set<Integer> idsOf(List<SearchResult> results) {
-        Set<Integer> ids = new HashSet<>(results.size() * 2);
+    /**
+     * 测当前堆占用。先跑几轮 GC 让测量点尽量接近"存活对象大小"。
+     *
+     * <p>这是<b>粗测</b>：System.gc() 只是建议，JVM 可以不理会；
+     * 而且测量期间还有其他对象在分配。但它足以反映数量级差异 ——
+     * 这正是我们要观察的（对象化布局 vs 扁平数组）。
+     */
+    private static long usedHeapBytes() {
+        Runtime runtime = Runtime.getRuntime();
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+            try {
+                Thread.sleep(60);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return runtime.totalMemory() - runtime.freeMemory();
+    }
+
+    private static Set<Integer> idsOf(List<SearchResult> results) {        Set<Integer> ids = new HashSet<>(results.size() * 2);
         for (SearchResult result : results) {
             ids.add(result.id());
         }

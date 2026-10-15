@@ -37,6 +37,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# Windows 控制台默认 GBK，print 非 ASCII 字符会抛 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 # ----------------------------------------------------------------------
 # HTTP（用标准库，不引入额外依赖）

@@ -26,6 +26,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Windows 控制台默认 GBK，print 非 ASCII 字符会抛 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 # ----------------------------------------------------------------------
 # 读取
@@ -261,6 +266,16 @@ def section_recall(recall: dict) -> str:
     points = hnsw.get("points", [])
     params = recall.get("hnswParams", {})
 
+    # 内存这一行是可选的：早期产出的结果 JSON 里没有这个字段
+    delta = hnsw.get("heapDeltaBytes")
+    estimated = hnsw.get("estimatedBytes")
+    if delta is not None and estimated is not None:
+        memory_line = (
+            f"| HNSW 索引堆内占用 | {delta / 1024 / 1024:,.1f} MB 实测"
+            f"（数组本身估算 {estimated / 1024 / 1024:,.1f} MB） |")
+    else:
+        memory_line = "| HNSW 索引堆内占用 | 未测量 |"
+
     lines = [
         "## 三、召回率 / 延迟 权衡（真实测量）",
         "",
@@ -273,6 +288,7 @@ def section_recall(recall: dict) -> str:
         f"| HNSW 参数 | m={params.get('m')}, efConstruction={params.get('efConstruction')} |",
         f"| HNSW 建图耗时 | {hnsw.get('buildMillis'):,} ms |",
         f"| 暴力检索建库耗时 | {bf.get('buildMillis'):,} ms |",
+        memory_line,
         f"| 图最大层 | {hnsw.get('maxLevel')} |",
         f"| 图总边数 | {hnsw.get('totalLinks'):,}（平均出边 {hnsw.get('averageDegree')}） |",
         "",

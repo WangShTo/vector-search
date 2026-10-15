@@ -25,7 +25,9 @@ data/*.bin
 data/*.idx
 
 # 评测产物
-bench/results/
+# 注意：recall-baseline.json 是改造前的基线，用来做前后对比，要保留
+bench/results/*
+!bench/results/recall-baseline.json
 eval/results/
 
 # 服务运行日志（dev.ps1 产生）

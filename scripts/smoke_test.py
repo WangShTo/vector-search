@@ -19,6 +19,11 @@ import sys
 import time
 import urllib.request
 
+# Windows 控制台默认 GBK，print 非 ASCII 字符会抛 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 JAVA = "http://127.0.0.1:8080"
 PY = "http://127.0.0.1:8000"
 

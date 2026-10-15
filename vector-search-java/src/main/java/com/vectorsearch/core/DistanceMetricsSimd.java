@@ -35,44 +35,69 @@ public final class DistanceMetricsSimd {
         return SPECIES.length();
     }
 
-    /** 内积的 SIMD 实现。尾部不足一个向量的元素走标量收尾。 */
+    /** 内积。两个数组长度必须相等。 */
     public static float dot(float[] a, float[] b) {
         checkSameLength(a, b);
+        return dot(a, 0, b, 0, a.length);
+    }
+
+    /**
+     * 带偏移与长度的内积 —— <b>扁平存储的关键</b>。
+     *
+     * <p>把所有向量拼成一个大数组后，第 i 条向量的数据位于
+     * {@code a[i * dimension]} 开始处。有了这个方法，就不必再把每条向量
+     * 复制成独立的 {@code float[]}：直接传入整个大数组和偏移量即可。
+     *
+     * <p>这正是扁平化布局能与 SIMD 共存的原因 —— 数据连续，向量化加载
+     * 反而比原来追着 {@code List<float[]>} 的引用跳转更友好。
+     *
+     * @param a       数组 A
+     * @param aOffset A 的起始下标
+     * @param b       数组 B
+     * @param bOffset B 的起始下标
+     * @param length  参与计算的元素个数
+     */
+    public static float dot(float[] a, int aOffset, float[] b, int bOffset, int length) {
         int i = 0;
-        int bound = SPECIES.loopBound(a.length);
+        int bound = SPECIES.loopBound(length);
         FloatVector acc = FloatVector.zero(SPECIES);
 
         for (; i < bound; i += SPECIES.length()) {
-            FloatVector va = FloatVector.fromArray(SPECIES, a, i);
-            FloatVector vb = FloatVector.fromArray(SPECIES, b, i);
+            FloatVector va = FloatVector.fromArray(SPECIES, a, aOffset + i);
+            FloatVector vb = FloatVector.fromArray(SPECIES, b, bOffset + i);
             acc = va.fma(vb, acc);
         }
 
         float sum = acc.reduceLanes(VectorOperators.ADD);
-        // 尾部（例如 768 % 8 == 0 时不会进入；但维度不是 lane 整数倍时必须处理）
-        for (; i < a.length; i++) {
-            sum += a[i] * b[i];
+        // 尾部（维度不是 lane 整数倍时才会进入）
+        for (; i < length; i++) {
+            sum += a[aOffset + i] * b[bOffset + i];
         }
         return sum;
     }
 
-    /** 平方欧氏距离的 SIMD 实现。 */
+    /** 平方欧氏距离。两个数组长度必须相等。 */
     public static float l2Squared(float[] a, float[] b) {
         checkSameLength(a, b);
+        return l2Squared(a, 0, b, 0, a.length);
+    }
+
+    /** 带偏移与长度的平方欧氏距离。语义同 {@link #dot(float[], int, float[], int, int)}。 */
+    public static float l2Squared(float[] a, int aOffset, float[] b, int bOffset, int length) {
         int i = 0;
-        int bound = SPECIES.loopBound(a.length);
+        int bound = SPECIES.loopBound(length);
         FloatVector acc = FloatVector.zero(SPECIES);
 
         for (; i < bound; i += SPECIES.length()) {
-            FloatVector va = FloatVector.fromArray(SPECIES, a, i);
-            FloatVector vb = FloatVector.fromArray(SPECIES, b, i);
+            FloatVector va = FloatVector.fromArray(SPECIES, a, aOffset + i);
+            FloatVector vb = FloatVector.fromArray(SPECIES, b, bOffset + i);
             FloatVector diff = va.sub(vb);
             acc = diff.fma(diff, acc);
         }
 
         float sum = acc.reduceLanes(VectorOperators.ADD);
-        for (; i < a.length; i++) {
-            float d = a[i] - b[i];
+        for (; i < length; i++) {
+            float d = a[aOffset + i] - b[bOffset + i];
             sum += d * d;
         }
         return sum;

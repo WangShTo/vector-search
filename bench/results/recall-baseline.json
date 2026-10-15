@@ -1,0 +1,77 @@
+{
+  "nodeCount" : 100000,
+  "dimension" : 512,
+  "topK" : 10,
+  "clusters" : 316,
+  "queryCount" : 200,
+  "seed" : 42,
+  "dataDistribution" : "gaussian-mixture",
+  "hnswParams" : {
+    "m" : 16,
+    "efConstruction" : 200
+  },
+  "bruteForce" : {
+    "buildMillis" : 187,
+    "meanMicros" : 47528.1,
+    "p50Micros" : 46131.6,
+    "p95Micros" : 56349.2,
+    "p99Micros" : 63049.0
+  },
+  "hnsw" : {
+    "buildMillis" : 150970,
+    "maxLevel" : 6,
+    "totalLinks" : 3305622,
+    "averageDegree" : 33.1,
+    "levelHistogram" : [ 93812, 5801, 361, 23, 2, 0, 1 ],
+    "layerPopulation" : [ 100000, 6188, 387, 26, 3, 1, 1 ],
+    "points" : [ {
+      "efSearch" : 10,
+      "recallAtK" : 0.898,
+      "meanMicros" : 216.1,
+      "p50Micros" : 191.9,
+      "p95Micros" : 416.1,
+      "p99Micros" : 566.1,
+      "speedupVsBruteForce" : 219.9
+    }, {
+      "efSearch" : 20,
+      "recallAtK" : 0.9745,
+      "meanMicros" : 219.1,
+      "p50Micros" : 209.5,
+      "p95Micros" : 345.4,
+      "p99Micros" : 430.6,
+      "speedupVsBruteForce" : 216.9
+    }, {
+      "efSearch" : 50,
+      "recallAtK" : 0.999,
+      "meanMicros" : 255.6,
+      "p50Micros" : 247.8,
+      "p95Micros" : 390.2,
+      "p99Micros" : 456.5,
+      "speedupVsBruteForce" : 185.9
+    }, {
+      "efSearch" : 100,
+      "recallAtK" : 1.0,
+      "meanMicros" : 341.3,
+      "p50Micros" : 335.0,
+      "p95Micros" : 508.7,
+      "p99Micros" : 570.1,
+      "speedupVsBruteForce" : 139.2
+    }, {
+      "efSearch" : 200,
+      "recallAtK" : 1.0,
+      "meanMicros" : 477.2,
+      "p50Micros" : 460.9,
+      "p95Micros" : 703.8,
+      "p99Micros" : 931.0,
+      "speedupVsBruteForce" : 99.6
+    }, {
+      "efSearch" : 400,
+      "recallAtK" : 1.0,
+      "meanMicros" : 1081.8,
+      "p50Micros" : 1057.6,
+      "p95Micros" : 1584.5,
+      "p99Micros" : 1836.3,
+      "speedupVsBruteForce" : 43.9
+    } ]
+  }
+}

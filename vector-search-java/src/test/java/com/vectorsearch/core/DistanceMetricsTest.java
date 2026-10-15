@@ -74,6 +74,60 @@ class DistanceMetricsTest {
         }
     }
 
+    @Test
+    @DisplayName("偏移版必须与独立数组的结果一致（这是扁平存储正确性的前提）")
+    void offsetVariantsMatchStandalone() {
+        // 特意混入非 lane 整数倍的维度：尾部标量收尾 + 偏移量叠加，
+        // 这两个逻辑叠在一起是最容易出现 off-by-one 的地方
+        for (int dimension : new int[]{1, 7, 8, 9, 100, 512, 769}) {
+            int count = 4;
+            float[][] standalone = new float[count][];
+            float[] flat = new float[count * dimension];
+            java.util.Random random = new java.util.Random(1000 + dimension);
+
+            for (int i = 0; i < count; i++) {
+                standalone[i] = new float[dimension];
+                for (int d = 0; d < dimension; d++) {
+                    standalone[i][d] = random.nextFloat() * 2f - 1f;
+                }
+                // 模拟扁平存储：第 i 条向量落在 i*dimension 处
+                System.arraycopy(standalone[i], 0, flat, i * dimension, dimension);
+            }
+
+            for (int i = 0; i < count; i++) {
+                for (int j = 0; j < count; j++) {
+                    int offsetI = i * dimension;
+                    int offsetJ = j * dimension;
+
+                    assertEquals(
+                            DistanceMetrics.dot(standalone[i], standalone[j]),
+                            DistanceMetrics.dot(flat, offsetI, flat, offsetJ, dimension),
+                            "标量偏移版 dot 不一致 (dim=" + dimension + ", " + i + "," + j + ")");
+
+                    assertRelativelyClose(
+                            DistanceMetricsSimd.dot(standalone[i], standalone[j]),
+                            DistanceMetricsSimd.dot(flat, offsetI, flat, offsetJ, dimension),
+                            "SIMD 偏移版 dot 不一致 (dim=" + dimension + ", " + i + "," + j + ")");
+
+                    assertRelativelyClose(
+                            DistanceMetricsSimd.l2Squared(standalone[i], standalone[j]),
+                            DistanceMetricsSimd.l2Squared(flat, offsetI, flat, offsetJ, dimension),
+                            "SIMD 偏移版 l2Squared 不一致 (dim=" + dimension + ", " + i + "," + j + ")");
+                }
+            }
+
+            // 偏移版归一化不应污染相邻的向量
+            float[] neighborBefore = java.util.Arrays.copyOfRange(flat, 0, dimension);
+            DistanceMetrics.normalizeInPlace(flat, dimension, dimension);
+            assertEquals(1f, DistanceMetrics.l2Squared(flat, dimension, new float[dimension], 0, dimension), 1e-3f,
+                    "偏移版归一化后模长应为 1");
+            for (int d = 0; d < dimension; d++) {
+                assertEquals(neighborBefore[d], flat[d],
+                        "归一化第 1 条向量时污染了第 0 条（dim=" + dimension + "）");
+            }
+        }
+    }
+
     /**
      * 按<b>相对</b>误差比较两个 float。
      *

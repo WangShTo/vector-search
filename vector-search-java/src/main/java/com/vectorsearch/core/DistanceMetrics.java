@@ -18,9 +18,20 @@ public final class DistanceMetrics {
     /** 内积。向量已归一化时，等价于余弦相似度。 */
     public static float dot(float[] a, float[] b) {
         checkSameLength(a, b);
+        return dot(a, 0, b, 0, a.length);
+    }
+
+    /**
+     * 带偏移与长度的内积。
+     *
+     * <p>扁平存储下第 i 条向量的数据位于 {@code a[i * dimension]} 处，
+     * 用这个方法就能直接在整块大数组上计算，不必把每条向量复制出来。
+     * 它是 {@link DistanceMetricsSimd} 同名方法的标量对照。
+     */
+    public static float dot(float[] a, int aOffset, float[] b, int bOffset, int length) {
         float sum = 0f;
-        for (int i = 0; i < a.length; i++) {
-            sum += a[i] * b[i];
+        for (int i = 0; i < length; i++) {
+            sum += a[aOffset + i] * b[bOffset + i];
         }
         return sum;
     }
@@ -28,9 +39,14 @@ public final class DistanceMetrics {
     /** 平方欧氏距离。注意不是开方后的值 —— 排序只需要单调量，省一次 sqrt。 */
     public static float l2Squared(float[] a, float[] b) {
         checkSameLength(a, b);
+        return l2Squared(a, 0, b, 0, a.length);
+    }
+
+    /** 带偏移与长度的平方欧氏距离。 */
+    public static float l2Squared(float[] a, int aOffset, float[] b, int bOffset, int length) {
         float sum = 0f;
-        for (int i = 0; i < a.length; i++) {
-            float d = a[i] - b[i];
+        for (int i = 0; i < length; i++) {
+            float d = a[aOffset + i] - b[bOffset + i];
             sum += d * d;
         }
         return sum;
@@ -57,8 +73,19 @@ public final class DistanceMetrics {
 
     /** 原地 L2 归一化。零向量保持原样，不做除零。 */
     public static void normalizeInPlace(float[] v) {
+        normalizeInPlace(v, 0, v.length);
+    }
+
+    /**
+     * 原地 L2 归一化的偏移版本。
+     *
+     * <p>扁平存储下新向量是直接写进大数组的，需要就地归一化那一段，
+     * 而不是先复制成独立数组再归一化 —— 后者会让扁平化失去意义。
+     */
+    public static void normalizeInPlace(float[] v, int offset, int length) {
         float sumOfSquares = 0f;
-        for (float x : v) {
+        for (int i = 0; i < length; i++) {
+            float x = v[offset + i];
             sumOfSquares += x * x;
         }
         float norm = (float) Math.sqrt(sumOfSquares);
@@ -66,8 +93,8 @@ public final class DistanceMetrics {
             return;
         }
         float inv = 1f / norm;
-        for (int i = 0; i < v.length; i++) {
-            v[i] *= inv;
+        for (int i = 0; i < length; i++) {
+            v[offset + i] *= inv;
         }
     }
 
