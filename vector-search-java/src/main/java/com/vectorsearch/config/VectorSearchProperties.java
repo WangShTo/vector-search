@@ -28,12 +28,13 @@ public record VectorSearchProperties(
             modelTimeoutMs = 5000;
         }
         if (index == null) {
-            index = new Index(768, 16, 200, 100, "./data/index");
+            index = new Index(512, 16, 200, 100, "./data/index");
         }
     }
 
     /**
-     * @param dimension        向量维度，必须与 Python 侧模型输出一致（BGE-small-zh 为 768）
+     * @param dimension        向量维度，必须与 Python 侧模型输出一致。
+     *                         bge-small-zh-v1.5 为 512，bge-base-zh-v1.5 为 768。
      * @param m                HNSW 每层最大出边数
      * @param efConstruction   HNSW 建图候选池大小
      * @param efSearch         查询候选池大小，recall / 延迟 的主旋钮
@@ -48,7 +49,7 @@ public record VectorSearchProperties(
     ) {
         public Index {
             if (dimension <= 0) {
-                dimension = 768;
+                dimension = 512;
             }
             if (m < 2) {
                 m = 16;

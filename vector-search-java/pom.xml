@@ -108,11 +108,13 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
-          <!-- 同样必须是两个独立元素 -->
-          <jvmArguments>
-            <jvmArgument>--add-modules</jvmArgument>
-            <jvmArgument>${vector.api.module}</jvmArgument>
-          </jvmArguments>
+          <!--
+            注意：这里的 jvmArguments 是「字符串」类型，不是列表。
+            写成 <jvmArgument> 子元素会报 "must not contain child elements"。
+            插件会按空白把这个字符串切成多个 JVM 参数，所以拼在一起是对的。
+            这一点和上面 maven-compiler-plugin 的 compilerArgs（列表）相反 —— 两者容易搞混。
+          -->
+          <jvmArguments>${vector.api.args}</jvmArguments>
         </configuration>
       </plugin>
     </plugins>

@@ -14,8 +14,14 @@ vector-search:
   model-timeout-ms: 5000
 
   index:
-    # 向量维度：BGE-small-zh-v1.5 是 768
-    dimension: 768
+    # 向量维度，必须与 Python 侧模型严格一致：
+    #   bge-small-zh-v1.5 -> 512   （当前使用）
+    #   bge-base-zh-v1.5  -> 768
+    #   bge-large-zh-v1.5 -> 1024
+    # 写错不会静默算错：灌入第一条文档时就会报「向量维度不匹配」。
+    # 这个校验在 ModelServiceClient 里，是刻意加的 —— 维度错了却拖到检索结果
+    # 不对劲才发现，排查成本极高。
+    dimension: 512
     # HNSW 参数，第 5 周的消融实验就改这里
     m: 16
     ef-construction: 200
