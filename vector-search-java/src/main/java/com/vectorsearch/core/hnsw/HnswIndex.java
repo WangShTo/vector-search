@@ -1,17 +1,16 @@
 package com.vectorsearch.core.hnsw;
 
 import com.vectorsearch.core.DistanceMetrics;
+import com.vectorsearch.core.DistanceMetricsSimd;
 import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.VectorIndex;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -42,6 +41,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class HnswIndex implements VectorIndex {
 
+    /** visitedStamp 的初始容量，之后按节点数翻倍增长。 */
+    private static final int INITIAL_CAPACITY = 1024;
+
     private final int dimension;
     private final HnswParams params;
     private final Random random;
@@ -56,6 +58,20 @@ public class HnswIndex implements VectorIndex {
     private final List<int[][]> links = new ArrayList<>();
     /** 每个节点的最高层号。 */
     private final List<Integer> levels = new ArrayList<>();
+
+    // ---------- 访问标记（版本号戳） ----------
+    /**
+     * visitedStamp[node] == 当前 token 表示"本轮搜索已访问过该节点"。
+     *
+     * <p>取代 {@code HashSet<Integer>}：后者在每次 searchLayer 里都要
+     * 装箱（每个邻居一个 Integer 对象）、算哈希、分配桶数组，而且每轮都要重新建。
+     * 版本号戳把这些全部消掉 —— 标记就是写一个 int，判断就是比一个 int。
+     * 建图和查询都跑在热路径上，这个改动的收益很直接。
+     */
+    private int[] visitedStamp = new int[INITIAL_CAPACITY];
+
+    /** 当前搜索轮次的令牌。0 是保留值，表示"未访问"。 */
+    private int visitToken = 0;
 
     // ---------- 图入口 ----------
     private int entryPoint = -1;
@@ -107,6 +123,7 @@ public class HnswIndex implements VectorIndex {
             nodeLinks[l] = new int[0];
         }
         links.add(nodeLinks);
+        ensureVisitedCapacity(nodeId + 1);
 
         // 第一个节点：直接成为入口，没有图可走
         if (entryPoint == -1) {
@@ -264,9 +281,9 @@ public class HnswIndex implements VectorIndex {
      * @param entry 起始节点（必须是第 layer 层存在的节点）
      */
     private List<SearchResult> searchLayer(float[] query, int entry, int ef, int layer) {
-        // TODO(第3周): HashSet<Integer> 每次查询都装箱 + 分配，是热点路径上的主要开销之一。
-        //  改为 int[] visitedStamp + 递增版本号，可省掉全部装箱与清空成本。
-        Set<Integer> visited = new HashSet<>();
+        // 版本号戳：本轮搜索的令牌。写 token 即"已访问"，读 token 即"访问过"。
+        // 取代 HashSet<Integer>，省掉全部装箱、哈希与每轮重建。
+        int token = nextVisitToken();
 
         // 大顶堆：堆顶 = 最近的候选
         PriorityQueue<SearchResult> candidates =
@@ -276,7 +293,7 @@ public class HnswIndex implements VectorIndex {
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score));
 
         SearchResult start = new SearchResult(entry, similarity(query, entry));
-        visited.add(entry);
+        visitedStamp[entry] = token;
         candidates.offer(start);
         result.offer(start);
 
@@ -290,9 +307,10 @@ public class HnswIndex implements VectorIndex {
             }
 
             for (int neighbor : links.get(nearest.id())[layer]) {
-                if (!visited.add(neighbor)) {
+                if (visitedStamp[neighbor] == token) {
                     continue;
                 }
+                visitedStamp[neighbor] = token;
                 float sim = similarity(query, neighbor);
                 SearchResult candidate = new SearchResult(neighbor, sim);
                 SearchResult currentWorst = result.peek();
@@ -390,6 +408,29 @@ public class HnswIndex implements VectorIndex {
     // =====================================================================
 
     /**
+     * 取下一个访问令牌。
+     *
+     * <p>版本号戳的关键在于"不用清空数组"：只要换一个令牌，
+     * 上一轮的标记自然就全部失效了。代价是 int 会耗尽 ——
+     * 真到 21 亿次搜索时把数组清零并从头开始即可，实际不可能触发，
+     * 但必须处理，否则会变成静默的漏访问（把没访问过的节点当成访问过）。
+     */
+    private int nextVisitToken() {
+        if (++visitToken == Integer.MAX_VALUE) {
+            Arrays.fill(visitedStamp, 0);
+            visitToken = 1;
+        }
+        return visitToken;
+    }
+
+    private void ensureVisitedCapacity(int required) {
+        if (required > visitedStamp.length) {
+            visitedStamp = Arrays.copyOf(visitedStamp,
+                    Math.max(required, visitedStamp.length * 2));
+        }
+    }
+
+    /**
      * 抽样层高。服从几何分布，期望值随 {@code 1/ln(m)} 衰减 ——
      * 这保证了上层节点数指数级减少，形成"金字塔"结构。
      */
@@ -404,7 +445,10 @@ public class HnswIndex implements VectorIndex {
 
     /** 向量已归一化，所以内积就是余弦相似度。 */
     private float similarity(float[] query, int nodeId) {
-        return DistanceMetrics.dot(query, vectors.get(nodeId));
+        // 用 SIMD 而不是标量：距离计算是建图与查询的绝对热点，
+        // 512 维下标量 233ns / SIMD 36ns（JMH 实测，见 bench/REPORT.md）。
+        // 这直接决定 10 万点建图是几分钟还是十几分钟。
+        return DistanceMetricsSimd.dot(query, vectors.get(nodeId));
     }
 
     private void validate(float[] vector) {

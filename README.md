@@ -84,28 +84,50 @@
 | Python | 3.11 – 3.13 | 3.13 已验证可用 |
 | Docker | 可选 | 用于一键部署 |
 
-### 方式一：本地分别启动（推荐用于开发）
+### 方式一：一键启动（推荐）
 
-```bash
-# ---------- 1. Python 模型服务 ----------
+仓库自带开发脚本，一条命令拉起两个服务并等到就绪：
+
+```powershell
+# 首次需要装 Python 依赖
 cd model-service
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt   # Windows
-# source .venv/bin/activate && pip install -r requirements.txt  # Linux/macOS
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+cd ..
 
-.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-# 首次启动会下载 BGE 模型（约 400MB），之后走本地缓存
+# 启动（后台运行，日志写到 logs/）
+.\scripts\dev.ps1 start
+
+# 查看状态与索引统计
+.\scripts\dev.ps1 status
+
+# 停止
+.\scripts\dev.ps1 stop
 ```
 
+`dev.ps1` 还提供三个常用动作：
+
+| 动作 | 作用 |
+|---|---|
+| `load` | 把 `data/eval/corpus.jsonl` 灌进索引 |
+| `smoke` | 端到端冒烟测试（真实 BGE + 语义检索验证） |
+| `eval` | 跑检索质量评测，输出 recall / MRR / NDCG / 延迟报告 |
+
+### 方式二：手动分别启动
+
 ```bash
-# ---------- 2. Java 检索服务 ----------
+# Python 模型服务（首次启动会下载 BGE 模型，约 100MB，之后走本地缓存）
+cd model-service
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Java 检索服务
 cd vector-search-java
 mvn spring-boot:run
 ```
 
-服务地址：Java `http://localhost:8080`，Python `http://localhost:8000`。
+服务地址：Java `http://127.0.0.1:8080`，Python `http://127.0.0.1:8000`。
 
-### 方式二：Docker Compose
+### 方式三：Docker Compose
 
 ```bash
 docker compose up --build
@@ -281,12 +303,17 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] Spring Boot 服务化 + 分阶段耗时统计
 - [x] Python 模型服务 + 动态批处理
 - [x] 评测脚手架（语料构建 / 查询生成 / 指标计算）
-- [x] 单元测试（recall 对照暴力检索）
-- [ ] JMH 基准
-- [ ] 堆外内存改造
-- [ ] BM25 + RRF 混合召回
+- [x] 单元测试（11 个用例，recall 对照暴力检索）
+- [x] JMH 微基准（SIMD 距离 / HNSW 检索 / 暴力检索）
+- [x] 召回率扫描器 + 自动生成基准报告
+- [x] 开发脚本（一键启停 / 灌库 / 冒烟 / 评测）
+- [x] 索引内部优化（SIMD 距离 5.32× + visited 版本号戳，建图 5000 点 34.8s → 4.3s）
+- [ ] 完全堆外内存 + 扁平数组布局
+- [ ] BM25 + RRF 混合召回 + rerank 接入检索链路
 - [ ] 索引持久化与热更新
+- [ ] StampedLock 乐观读 + 并发压测
 - [ ] Docker 镜像验证 + CI
+- [ ] 前端 demo 页面
 
 ---
 
@@ -294,31 +321,71 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 
 ```
 vector-search/
-├── vector-search-java/              # Java 检索服务
+│
+├── README.md                     # 门面：架构、快速开始、设计取舍
+├── docker-compose.yml            # 一键部署（两个服务）
+│
+├── vector-search-java/           # ── Java 检索服务 ──
 │   └── src/
 │       ├── main/java/com/vectorsearch/
-│       │   ├── core/                # 索引核心（与框架无关）
+│       │   ├── core/             #   索引核心（零框架依赖，可单独基准测试）
 │       │   │   ├── DistanceMetrics.java        # 标量距离（基线）
 │       │   │   ├── DistanceMetricsSimd.java    # SIMD 距离
 │       │   │   ├── VectorIndex.java            # 索引抽象
-│       │   │   ├── bruteforce/                 # 暴力检索（对照组）
-│       │   │   └── hnsw/                       # HNSW 实现
-│       │   ├── client/              # 调 Python 模型服务
-│       │   ├── service/             # 索引管理 / 文档存储 / 检索编排
-│       │   ├── api/                 # REST 接口与 DTO
-│       │   └── config/              # 配置绑定
-│       └── test/java/               # 单元测试
-├── model-service/                   # Python 模型服务
-│   └── app/
-│       ├── config.py                # 配置 + HF 镜像设置（必须在最前）
-│       ├── embedder.py              # 动态批处理 + BGE embedding
-│       ├── reranker.py              # Cross-Encoder 精排（懒加载）
-│       ├── schemas.py               # HTTP 契约
-│       └── main.py                  # FastAPI 应用
-├── eval/                            # 评测脚手架
-│   ├── build_dataset.py             # 语料 -> 分块 -> 查询
-│   └── evaluate.py                  # recall / MRR / NDCG / 延迟
-├── bench/                           # JMH 基准与压测报告（第 2 周起）
-├── data/                            # 语料与索引数据（不入库）
-└── docker-compose.yml
+│       │   │   ├── SearchResult.java
+│       │   │   ├── bruteforce/                 # 暴力检索（正确性基准 + 对照组）
+│       │   │   └── hnsw/                       # HNSW 实现 + 参数
+│       │   ├── client/           #   调 Python 模型服务（批量）
+│       │   ├── service/          #   索引管理 / 文档存储 / 检索编排
+│       │   ├── api/              #   REST 接口、DTO、异常处理
+│       │   └── config/           #   配置绑定
+│       └── test/java/com/vectorsearch/
+│           ├── core/             #   单元测试（含 recall 对照）
+│           └── bench/            #   JMH 基准 + 召回率扫描器 + 数据生成器
+│
+├── model-service/                # ── Python 模型服务 ──
+│   ├── app/
+│   │   ├── config.py             #   配置 + HF 镜像（必须在所有 torch 导入之前）
+│   │   ├── embedder.py           #   动态批处理 + BGE embedding
+│   │   ├── reranker.py           #   Cross-Encoder 精排（懒加载）
+│   │   ├── schemas.py            #   HTTP 契约（字段名与 Java 侧 DTO 一一对应）
+│   │   └── main.py               #   FastAPI 应用
+│   ├── tests/test_batcher.py     #   动态批处理正确性测试
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── scripts/                      # ── 所有可执行入口 ──
+│   ├── env.ps1                   #   工具链探测（被其他脚本 dot-source）
+│   ├── dev.ps1                   #   一键启停 / 灌库 / 冒烟 / 评测
+│   ├── run_bench.ps1             #   跑基准并出报告
+│   ├── render_bench_report.py    #   把原始 JSON 渲染成 Markdown 报告
+│   ├── smoke_test.py             #   端到端冒烟（真实 BGE + 语义验证）
+│   └── load_corpus.py            #   分批灌语料到索引
+│
+├── eval/                         # ── 检索质量评测 ──
+│   ├── build_dataset.py          #   语料 → 分块（两种策略）→ 带标注查询
+│   └── evaluate.py               #   recall@k / MRR / NDCG / P50-P99 延迟报告
+│
+├── bench/                        # ── 基准产出 ──
+│   ├── REPORT.md                 #   自动生成的报告（脚本产物，勿手改）
+│   └── results/                  #   JMH JSON + 召回率 JSON（不入库）
+│
+├── data/
+│   ├── corpus/                   #   语料（示例已提供，可替换成你自己的资料）
+│   └── eval/                     #   构建好的评测集（不入库）
+│
+└── logs/                         # 服务运行日志（不入库）
 ```
+
+### 产出物一览
+
+这个项目最后能拿出来的东西，以及它们各自从哪来：
+
+| 产出 | 位置 | 生成方式 |
+|---|---|---|
+| 基准报告（数字来源） | `bench/REPORT.md` | `.\scripts\run_bench.ps1` |
+| 检索质量评测 | `bench/results/*.md` | `.\scripts\dev.ps1 eval` |
+| 简历文案 | `docs/RESUME.md` | 手工维护，数字引自基准报告 |
+| 技术博客草稿 | `docs/BLOG.md` | 手工维护 |
+| 可交互 demo | `web/index.html` | 直接打开（第 7 周） |
+

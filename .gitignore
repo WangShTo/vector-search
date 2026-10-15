@@ -28,6 +28,9 @@ data/*.idx
 bench/results/
 eval/results/
 
+# 服务运行日志（dev.ps1 产生）
+logs/
+
 # IDE
 .idea/
 *.iml
