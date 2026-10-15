@@ -1,0 +1,41 @@
+# Java
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# 模型缓存（体积大，不入库）
+.cache/
+models/
+*.onnx
+*.bin
+*.safetensors
+
+# 索引数据
+data/index/
+data/*.bin
+data/*.idx
+
+# 评测产物
+bench/results/
+eval/results/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db

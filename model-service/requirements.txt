@@ -1,0 +1,15 @@
+# 向量检索模型服务依赖
+#
+# 用下限约束而不是精确锁定：本机是 Python 3.13，部分包的
+# 精确版本可能没有 cp313 的 wheel。如果你要在生产里复现，
+# 请把 pip freeze 的结果固定下来。
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+pydantic>=2.9,<3.0
+numpy>=1.26,<3.0
+
+# torch 由 sentence-transformers 间接依赖，这里显式写出来是为了
+# 能单独控制它（装 CPU 版可以避免拖下来 2GB+ 的 CUDA 包）
+torch>=2.4
+sentence-transformers>=3.0,<4.0

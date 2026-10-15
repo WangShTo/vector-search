@@ -1,0 +1,49 @@
+version: "3.8"
+
+# 一键启动：Java 检索服务 + Python 模型服务
+#   docker compose up --build
+#
+# 首次启动 Python 服务会下载 BGE 模型（约 400MB），耐心等待。
+# 模型缓存在 named volume 里，重建容器不会重新下载。
+
+services:
+  model-service:
+    build:
+      context: ./model-service
+    container_name: vs-model-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      # 默认用 CPU；有 NVIDIA 显卡且装了 nvidia-container-toolkit 时改成 cuda
+      - EMBEDDING_DEVICE=cpu
+      - EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+      - RERANKER_MODEL=BAAI/bge-reranker-base
+      # 动态批处理：最多攒 32 条或等 10ms，先到先发
+      - MAX_BATCH_SIZE=32
+      - BATCH_TIMEOUT_MS=10
+      # 国内直连 huggingface.co 会超时，走镜像。海外环境可改成官方源。
+      - HF_ENDPOINT=https://hf-mirror.com
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+
+  vector-search-java:
+    build:
+      context: ./vector-search-java
+    container_name: vs-java
+    ports:
+      - "8080:8080"
+    environment:
+      - MODEL_SERVICE_URL=http://model-service:8000
+      - JAVA_TOOL_OPTIONS=--add-modules jdk.incubator.vector
+    depends_on:
+      model-service:
+        condition: service_healthy
+
+volumes:
+  hf-cache:

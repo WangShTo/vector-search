@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: vector-search-java
+  jackson:
+    default-property-inclusion: non_null
+
+vector-search:
+  # Python 模型服务地址（docker compose 里由环境变量覆盖）
+  model-service-url: ${MODEL_SERVICE_URL:http://localhost:8000}
+  # 调模型服务的超时（毫秒）
+  model-timeout-ms: 5000
+
+  index:
+    # 向量维度：BGE-small-zh-v1.5 是 768
+    dimension: 768
+    # HNSW 参数，第 5 周的消融实验就改这里
+    m: 16
+    ef-construction: 200
+    # 查询时的候选池大小，越大越准越慢 —— 这是 recall/延迟 的主旋钮
+    ef-search: 100
+    # 索引落盘目录
+    data-dir: ./data/index
+
+logging:
+  level:
+    com.vectorsearch: INFO
