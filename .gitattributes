@@ -1,0 +1,21 @@
+# 统一换行符：避免 Windows 上检出成 CRLF、Linux 上变成 LF，
+# 进而在 diff 里产生整文件"改动"的噪音。
+# Git 的警告 "LF will be replaced by CRLF" 就是缺这个文件导致的。
+* text=auto eol=lf
+
+# 这些脚本必须保留 CRLF，否则在 Windows 上可能无法执行
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 二进制文件，不做任何换行转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.zip  binary
+*.jar  binary
+*.7z   binary
+*.exe  binary
+*.bin  binary
+*.safetensors binary
