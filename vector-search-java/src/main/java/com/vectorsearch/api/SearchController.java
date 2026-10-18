@@ -10,6 +10,7 @@ import com.vectorsearch.core.VectorIndex;
 import com.vectorsearch.core.hnsw.HnswIndex;
 import com.vectorsearch.service.DocumentStore;
 import com.vectorsearch.service.SearchService;
+import com.vectorsearch.service.SparseIndexManager;
 import com.vectorsearch.service.VectorIndexManager;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -29,15 +30,18 @@ public class SearchController {
 
     private final SearchService searchService;
     private final VectorIndexManager indexManager;
+    private final SparseIndexManager sparseIndexManager;
     private final DocumentStore documentStore;
     private final ModelServiceClient modelServiceClient;
 
     public SearchController(SearchService searchService,
                             VectorIndexManager indexManager,
+                            SparseIndexManager sparseIndexManager,
                             DocumentStore documentStore,
                             ModelServiceClient modelServiceClient) {
         this.searchService = searchService;
         this.indexManager = indexManager;
+        this.sparseIndexManager = sparseIndexManager;
         this.documentStore = documentStore;
         this.modelServiceClient = modelServiceClient;
     }
@@ -76,6 +80,10 @@ public class SearchController {
                 documentStore.count(),
                 documentStore.totalCharacters(),
                 hnswStats,
+                new StatsResponse.SparseStats(
+                        sparseIndexManager.size(),
+                        sparseIndexManager.termCount(),
+                        Math.round(sparseIndexManager.averageDocumentLength() * 10) / 10.0),
                 indexManager.restoredInMillis(),
                 modelServiceClient.isHealthy());
     }
@@ -104,6 +112,8 @@ public class SearchController {
     public StatsResponse reset(@RequestParam(defaultValue = VectorIndexManager.TYPE_HNSW) String type) {
         log.warn("收到索引重置请求，切换到: {}（当前数据将被清空）", type);
         indexManager.reset(type);
+        // 两路索引必须一起清，否则会出现"向量索引空了但 BM25 还留着旧数据"的错位
+        sparseIndexManager.clear();
         documentStore.clear();
         return stats();
     }

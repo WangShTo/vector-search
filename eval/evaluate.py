@@ -116,6 +116,9 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--ef-search", type=int, default=None,
                         help="覆盖 HNSW 的 efSearch；做 recall/延迟 曲线时用")
+    parser.add_argument("--mode", default=None,
+                        choices=["vector", "bm25", "hybrid"],
+                        help="检索模式。用来公平对比三条路线，不传则用服务端默认值")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 条（快速冒烟）")
     parser.add_argument("--repeat", type=int, default=1, help="重复轮数")
     parser.add_argument("--label", default="", help="本次运行的标签，写进报告标题")
@@ -152,6 +155,8 @@ def main() -> int:
             payload = {"query": item["query"], "topK": args.top_k}
             if args.ef_search is not None:
                 payload["efSearch"] = args.ef_search
+            if args.mode is not None:
+                payload["mode"] = args.mode
             try:
                 response = post_json(f"{args.service}/api/search", payload, args.timeout)
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -183,6 +188,7 @@ def main() -> int:
         "indexed_count": indexed,
         "top_k": args.top_k,
         "ef_search": args.ef_search,
+        "mode": args.mode or "服务端默认",
         "query_count": len(queries),
         "repeat": args.repeat,
         "evaluations": evaluation_count,
@@ -229,6 +235,7 @@ def render_report(s: dict) -> str:
 | 项 | 值 |
 |---|---|
 | 索引实现 | `{s['index_type']}` |
+| 检索模式 | `{s.get('mode', '服务端默认')}` |
 | 索引条数 | {s['indexed_count']} |
 | top-k | {s['top_k']} |
 | efSearch | {ef} |

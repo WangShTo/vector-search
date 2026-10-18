@@ -3,6 +3,7 @@ package com.vectorsearch.api.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * 检索请求。
@@ -23,7 +24,18 @@ public record SearchRequest(
 
         @Min(value = 1, message = "efSearch 至少为 1")
         @Max(value = 2000, message = "efSearch 最多为 2000")
-        Integer efSearch
+        Integer efSearch,
+
+        /**
+         * 检索模式：{@code vector} / {@code bm25} / {@code hybrid}。
+         * 不传则用配置里的默认值（默认 hybrid）。
+         *
+         * <p>暴露成请求参数是为了能<b>公平对比</b>三条路线 ——
+         * 只报"混合更好"没有说服力，必须有单路结果作为基准。
+         */
+        @Pattern(regexp = "vector|bm25|hybrid",
+                message = "mode 只能是 vector / bm25 / hybrid")
+        String mode
 ) {
 
     public int topKOrDefault() {

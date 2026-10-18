@@ -16,7 +16,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record VectorSearchProperties(
         String modelServiceUrl,
         int modelTimeoutMs,
-        Index index
+        Index index,
+        Search search
 ) {
 
     /** 兜底默认值，避免 yml 缺项时启动直接 NPE。 */
@@ -29,6 +30,39 @@ public record VectorSearchProperties(
         }
         if (index == null) {
             index = new Index(512, 16, 200, 100, "./data/index");
+        }
+        if (search == null) {
+            search = new Search("hybrid", 50, 60);
+        }
+    }
+
+    /**
+     * 检索模式与融合参数。
+     *
+     * @param defaultMode   请求不指定 mode 时用哪个：{@code vector} / {@code bm25} / {@code hybrid}
+     * @param candidatePool 融合前每一路召回多少条。太小会让融合没得挑，
+     *                      太大会把噪声也带进来。50 是常见起点。
+     * @param rrfK          RRF 平滑常数。见 {@link com.vectorsearch.core.fusion.RrfFusion}，
+     *                      60 是原论文经验值，对结果不敏感。
+     */
+    public record Search(String defaultMode, int candidatePool, int rrfK) {
+        public Search {
+            if (defaultMode == null || defaultMode.isBlank()) {
+                defaultMode = "hybrid";
+            }
+            if (candidatePool <= 0) {
+                candidatePool = 50;
+            }
+            if (rrfK <= 0) {
+                rrfK = 60;
+            }
+            if (!defaultMode.equals("vector")
+                    && !defaultMode.equals("bm25")
+                    && !defaultMode.equals("hybrid")) {
+                throw new IllegalArgumentException(
+                        "vector-search.search.default-mode 只能是 vector / bm25 / hybrid，实际是 "
+                                + defaultMode);
+            }
         }
     }
 

@@ -16,14 +16,16 @@ import java.util.List;
  */
 public record SearchResponse(
         String query,
+        String mode,
         List<SearchHit> hits,
         String indexType,
         Timing timing
 ) {
 
     /**
-     * @param embeddingMs 调 Python 服务做向量编码的耗时（含网络往返）
-     * @param searchMs    向量索引检索耗时
+     * @param embeddingMs 调 Python 服务做向量编码的耗时（含网络往返）。
+     *                    {@code bm25} 模式不调模型，此值为 0。
+     * @param searchMs    本地检索与融合耗时（不含编码）
      * @param totalMs     端到端耗时
      */
     public record Timing(long embeddingMs, long searchMs, long totalMs) {

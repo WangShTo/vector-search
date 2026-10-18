@@ -22,9 +22,20 @@ public record StatsResponse(
         int storedDocuments,
         long characterCount,
         HnswStats hnsw,
+        SparseStats sparse,
         Long restoredInMillis,
         boolean modelServiceHealthy
 ) {
+
+    /**
+     * BM25 稀疏索引的规模指标。
+     *
+     * @param documents            文档数
+     * @param terms                词表大小。太大说明分词切得太碎（二元组的常见问题）
+     * @param averageDocumentLength 平均文档长度（token 数），BM25 长度归一化的基准
+     */
+    public record SparseStats(int documents, int terms, double averageDocumentLength) {
+    }
 
     /**
      * @param m               每层最大出边数

@@ -83,6 +83,17 @@ public class DocumentStore {
         return documents.size();
     }
 
+    /**
+     * 遍历全部原文。
+     *
+     * <p>BM25 索引启动时靠这个从原文重建 —— 见 {@link SparseIndexManager} 的说明。
+     * 遍历顺序是 {@link ConcurrentHashMap} 的内部顺序，不保证稳定，
+     * 但调用方（建倒排表）不依赖顺序。
+     */
+    public void forEach(java.util.function.BiConsumer<Integer, String> action) {
+        documents.forEach(action);
+    }
+
     public long totalCharacters() {
         return totalCharacters.get();
     }

@@ -498,10 +498,100 @@ def section_snapshot(results_dir: Path) -> str:
     return "\n".join(lines)
 
 
+def section_hybrid(results_dir: Path) -> str:
+    """三种检索模式的对比：向量 / BM25 / 混合。"""
+    data = load_json(results_dir / "mode-comparison.json")
+    if not data:
+        return ""
+
+    lexical = data.get("lexical", {}).get("metrics", {})
+    semantic = data.get("semantic", {}).get("metrics", {})
+    summary = data.get("summary", {})
+    modes = [m for m in ("vector", "bm25", "hybrid") if m in lexical or m in semantic]
+    if not modes:
+        return ""
+
+    lines = [
+        "## 六、三种检索模式的对比",
+        "",
+        "同一份语料（602 个分块）上对比三条路线。这一节回答的是一个真问题：",
+        "**到底该用哪个模式？** 答案取决于查询长什么样。",
+        "",
+        "### 词面查询（150 条，取自文档原文）",
+        "",
+        "| 模式 | recall@10 | MRR@10 | P50 端到端延迟 |",
+        "|---|---|---|---|",
+    ]
+    for mode in modes:
+        m = lexical.get(mode)
+        if not m:
+            continue
+        lines.append(
+            f"| `{mode}` | **{m['recall']:.4f}** | {m['mrr']:.4f} | {m['p50_total_ms']:.0f} ms |")
+
+    lines += [
+        "",
+        "### 语义查询（16 条，人工改写提问方式）",
+        "",
+        "| 模式 | 命中率@10 | MRR@10 | P50 端到端延迟 |",
+        "|---|---|---|---|",
+    ]
+    for mode in modes:
+        m = semantic.get(mode)
+        if not m:
+            continue
+        lines.append(
+            f"| `{mode}` | **{m['hit']:.4f}** | {m['mrr']:.4f} | {m['p50']:.0f} ms |")
+
+    lines += [
+        "",
+        "### 结论：混合检索赢在「平均」和「最差情况」",
+        "",
+        "| 模式 | 平均 | 最差情况 |",
+        "|---|---|---|",
+    ]
+    for mode in modes:
+        s = summary.get(mode)
+        if not s:
+            continue
+        lines.append(f"| `{mode}` | {s['average']:.4f} | **{s['worst']:.4f}** |")
+
+    lines += [
+        "",
+        "**混合检索在两类查询上都不是第一，但它平均最好、最差情况最好。**",
+        "",
+        "这恰恰是生产环境选择混合检索的理由：你<b>无法预知</b>用户下一次会打哪种查询。",
+        "只上向量检索，遇到精确标识符就只有 0.80；只上 BM25，遇到换个说法的提问就只有 0.625。",
+        "混合把两条路线的短板都抬起来了。",
+        "",
+        "### BM25 模式还有一个实用价值：它是天然的降级路径",
+        "",
+        "`bm25` 模式<b>完全不调用模型服务</b>，所以端到端延迟是 0 ms 级（上表可见），",
+        "而另外两种要 40 ms 左右。这意味着模型服务挂掉时，",
+        "检索还能以 BM25 模式继续工作，而不是整个不可用。",
+        "做一个功能时顺手得到一条降级路径，通常比事后再补要干净。",
+        "",
+        "### 为什么等权融合没有让混合反超单路",
+        "",
+        "RRF 给两路相同的权重。当<b>一路明显强于另一路</b>时，等权会让弱的那路",
+        "把排第 1 的错结果抬进融合后的 top-k，挤掉强的那路排第 11 的正确结果。",
+        "",
+        "这不是 RRF 的缺陷，而是它的<b>前提</b>：它假设两路「可信度相当」。",
+        "真实场景里如果确知两路强弱，应该用加权 RRF 或先做分数校准 ——",
+        "但那样就必须用一份独立的验证集来定权重，否则就是在测试集上调参。",
+        "当前选择保留等权，并把这一点写清楚。",
+        "",
+        "> **样本量提醒**：语义查询只有 16 条，数字只能看趋势，不能当精确值。",
+        "> 它在这里的作用是与 150 条词面查询<b>交叉验证</b> —— 单看任何一边都会得出偏颇结论。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def section_method(recall: dict) -> str:
     """方法学与局限 —— 必须写，否则是在误导人。"""
     lines = [
-        "## 六、方法学与局限",
+        "## 七、方法学与局限",
         "",
         "### 数据是合成的，不是真实 embedding",
         "",
@@ -571,6 +661,7 @@ def main() -> int:
         section_recall(recall),
         section_concurrency(results_dir),
         section_snapshot(results_dir),
+        section_hybrid(results_dir),
         section_method(recall),
     ) if s]
 
