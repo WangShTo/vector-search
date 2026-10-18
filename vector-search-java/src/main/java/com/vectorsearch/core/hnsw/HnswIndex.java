@@ -32,7 +32,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * 每层一个 {@code int[]}，再加上 {@code List<Integer>} 的装箱。后果有两个：
  * 一是遍历邻居时不停追指针，缓存命中率差；二是垃圾回收要管理海量小对象。
  *
- * <p>现在整个索引只有 <b>8 个数组</b>：
+ * <p>现在整个索引只有 <b>7 个数组</b>：
  *
  * <pre>
  *   vectorStore    float[]  节点向量连续存放，第 i 条在 i*dimension 处
@@ -42,8 +42,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *   layer0Count    short[]  第 0 层每个节点的邻居数
  *   upperStore     int[]    第 1 层以上，按 (节点, 层) 紧凑打包
  *   upperOffset    int[]    每个节点的上层槽位起点，-1 表示没有上层
- *   visitedStamp   int[]    访问版本号戳
  * </pre>
+ *
+ * <p>访问标记<b>不在其中</b>：它是线程本地的，每个线程各持一份 int[capacity]。
+ * 原因是读路径不能写共享状态 —— 见 {@link #visitedScratch}。
  *
  * <p><b>关键的兼容性问题</b>：扁平存储要求距离计算支持"数组 + 偏移量"而不是
  * 两个独立数组，否则每算一次距离都得先把向量复制出来，扁平化就白做了。
@@ -83,7 +85,6 @@ public class HnswIndex implements VectorIndex {
     private int[] upperStore;
     private int[] upperOffset;
     private int upperStoreSize;
-    private int[] visitedStamp;
 
     private int capacity;
     private int nodeCount;
@@ -92,8 +93,29 @@ public class HnswIndex implements VectorIndex {
     private int entryPoint = -1;
     private int maxLevel = -1;
 
-    /** 当前搜索轮次的令牌。0 是保留值，表示"未访问"。 */
-    private int visitToken;
+    /**
+     * 每个线程自己的访问标记 —— <b>读路径上唯一的可写状态</b>。
+     *
+     * <p>最初 {@code visitedStamp} 是索引里的一个共享 {@code int[]}，
+     * 所有线程共用一个数组和一个令牌。单线程下这没问题，多线程下却是灾难：
+     * 每做一次搜索，每个线程都要往同一片内存写标记，缓存行在核心之间
+     * 来回失效（<b>伪共享</b>），线程越多争得越凶。
+     *
+     * <p>改成线程本地之后，读路径不再写任何共享状态。这不只是省掉争用 ——
+     * 它还是「读操作可以无锁并发」这个结论的<b>前提</b>：只要读路径不写共享状态，
+     * 理论上就不需要读锁。
+     *
+     * <p>代价是每个线程各持有一份 {@code int[capacity]}。2 万节点约 80 KB/线程，
+     * 几百个线程才会到几十 MB —— 对检索服务来说是划算的交换。
+     */
+    private final ThreadLocal<VisitedScratch> visitedScratch =
+            ThreadLocal.withInitial(VisitedScratch::new);
+
+    /** 线程本地的搜索暂存区。容量按索引容量对齐，索引扩容后由搜索路径重建。 */
+    private static final class VisitedScratch {
+        int[] visited = new int[0];
+        int token;
+    }
 
     public HnswIndex(int dimension, HnswParams params) {
         this(dimension, params, 42L);
@@ -131,7 +153,6 @@ public class HnswIndex implements VectorIndex {
         this.layer0Count = new short[newCapacity];
         this.upperOffset = new int[newCapacity];
         Arrays.fill(this.upperOffset, -1);
-        this.visitedStamp = new int[newCapacity];
         this.upperStore = new int[INITIAL_UPPER_STORE];
         this.upperStoreSize = 0;
     }
@@ -154,7 +175,8 @@ public class HnswIndex implements VectorIndex {
         externalIdStore = Arrays.copyOf(externalIdStore, newCapacity);
         levelStore = Arrays.copyOf(levelStore, newCapacity);
         layer0Count = Arrays.copyOf(layer0Count, newCapacity);
-        visitedStamp = Arrays.copyOf(visitedStamp, newCapacity);
+        // visitedStamp 已改为线程本地，容器扩容时不必跟着拷贝；
+        // 各线程在下次搜索时按 capacity 自行重建。
 
         int[] newUpperOffset = Arrays.copyOf(upperOffset, newCapacity);
         Arrays.fill(newUpperOffset, capacity, newCapacity, -1);
@@ -436,9 +458,15 @@ public class HnswIndex implements VectorIndex {
      */
     private List<SearchResult> searchLayer(float[] query, int queryOffset,
                                            int entry, int ef, int layer) {
-        // 版本号戳：写 token 即"已访问"，读 token 即"访问过"。
-        // 取代 HashSet<Integer>，省掉全部装箱、哈希与每轮重建。
-        int token = nextVisitToken();
+        // 线程本地的访问标记：容量跟着索引容量走，索引扩容后重建一次。
+        // 把数组引用存进局部变量，避免循环里反复走 ThreadLocal。
+        VisitedScratch scratch = visitedScratch.get();
+        if (scratch.visited.length < capacity) {
+            scratch.visited = new int[capacity];
+            scratch.token = 0;
+        }
+        int token = nextVisitToken(scratch);
+        int[] visited = scratch.visited;
 
         PriorityQueue<SearchResult> candidates =
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score).reversed());
@@ -446,7 +474,7 @@ public class HnswIndex implements VectorIndex {
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score));
 
         SearchResult start = new SearchResult(entry, similarity(query, queryOffset, entry));
-        visitedStamp[entry] = token;
+        visited[entry] = token;
         candidates.offer(start);
         result.offer(start);
 
@@ -461,10 +489,10 @@ public class HnswIndex implements VectorIndex {
             int count = neighborCount(nearest.id(), layer);
             for (int i = 0; i < count; i++) {
                 int neighbor = neighborAt(nearest.id(), layer, i);
-                if (visitedStamp[neighbor] == token) {
+                if (visited[neighbor] == token) {
                     continue;
                 }
-                visitedStamp[neighbor] = token;
+                visited[neighbor] = token;
 
                 float sim = similarity(query, queryOffset, neighbor);
                 SearchResult candidate = new SearchResult(neighbor, sim);
@@ -560,19 +588,19 @@ public class HnswIndex implements VectorIndex {
     // =====================================================================
 
     /**
-     * 取下一个访问令牌。
+     * 取下一个访问令牌（线程本地）。
      *
      * <p>版本号戳的关键在于"不用清空数组"：只要换一个令牌，
      * 上一轮的标记自然就全部失效了。代价是 int 会耗尽 ——
      * 真到 21 亿次搜索时把数组清零并从头开始，实际不可能触发，
      * 但必须处理，否则会变成静默的漏访问。
      */
-    private int nextVisitToken() {
-        if (++visitToken == Integer.MAX_VALUE) {
-            Arrays.fill(visitedStamp, 0);
-            visitToken = 1;
+    private int nextVisitToken(VisitedScratch scratch) {
+        if (++scratch.token == Integer.MAX_VALUE) {
+            Arrays.fill(scratch.visited, 0);
+            scratch.token = 1;
         }
-        return visitToken;
+        return scratch.token;
     }
 
     /**
@@ -704,8 +732,10 @@ public class HnswIndex implements VectorIndex {
     /**
      * 存储占用估算（字节）。
      *
-     * <p>这是<b>估算</b>，只统计 8 个数组本身，不含对象头与对齐填充。
-     * 它的价值在于和改造前的对象化布局做对比：那时 10 万节点会产生
+     * <p>这是<b>估算</b>，只统计索引自身的 7 个数组，不含对象头与对齐填充，
+     * 也<b>不含线程本地的访问标记</b>（那部分按线程数计，不属于索引本身）。
+     *
+     * <p>它的价值在于和改造前的对象化布局做对比：那时 10 万节点会产生
      * 约 30 万个对象，现在的对象数是常数级。
      */
     public long estimatedBytes() {
@@ -717,8 +747,7 @@ public class HnswIndex implements VectorIndex {
                     + (long) capacity * params.mMax0() * Integer.BYTES
                     + (long) capacity * Short.BYTES         // layer0Count
                     + (long) capacity * Integer.BYTES       // upperOffset
-                    + (long) upperStoreSize * Integer.BYTES
-                    + (long) capacity * Integer.BYTES;      // visitedStamp
+                    + (long) upperStoreSize * Integer.BYTES;
         } finally {
             lock.readLock().unlock();
         }

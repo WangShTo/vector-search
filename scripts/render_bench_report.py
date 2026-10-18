@@ -356,10 +356,93 @@ def section_recall(recall: dict) -> str:
     return "\n".join(lines)
 
 
+def parse_concurrency(raw: list[dict]) -> dict:
+    """把 JMH 的 searchWith{N}Threads 结果解析成 {线程数: 吞吐}。"""
+    out: dict = {}
+    for entry in raw:
+        name = entry["benchmark"].rsplit("searchWith", 1)[1]
+        threads = int(name.replace("Threads", "").replace("Thread", ""))
+        out[threads] = entry["primaryMetric"]["score"]
+    return out
+
+
+def section_concurrency(results_dir: Path) -> str:
+    """并发扩展性 —— 并如实说明这台机器测不准。"""
+    baseline_raw = load_json(results_dir / "concurrent-baseline.json")
+    optimized_raw = load_json(results_dir / "concurrent-optimized.json")
+    if not baseline_raw and not optimized_raw:
+        return ""
+
+    baseline = parse_concurrency(baseline_raw) if baseline_raw else {}
+    optimized = parse_concurrency(optimized_raw) if optimized_raw else {}
+    threads = sorted(set(baseline) | set(optimized))
+    if not threads:
+        return ""
+
+    b1 = baseline.get(1)
+    o1 = optimized.get(1)
+
+    lines = [
+        "## 四、并发扩展性",
+        "",
+        "单线程延迟再低，也不能说明服务扛得住并发。这一节测的是**吞吐随线程数的扩展**：",
+        "",
+        "```",
+        "扩展效率 = 实际吞吐(T 线程) / (T × 吞吐(1 线程))",
+        "```",
+        "",
+        "理想值 1.0。明显低于 1 说明存在争用 —— 线程越多，花在等待上的时间越多。",
+        "",
+        "| 线程 | 基线 ops/s | 线程本地后 ops/s | 基线扩展效率 | 优化后扩展效率 |",
+        "|---|---|---|---|---|",
+    ]
+
+    for t in threads:
+        bs = baseline.get(t)
+        os_ = optimized.get(t)
+        b_cell = f"{bs:,.0f}" if bs else "—"
+        o_cell = f"{os_:,.0f}" if os_ else "—"
+        be = f"{bs / (b1 * t):.2f}" if bs and b1 else "—"
+        oe = f"{os_ / (o1 * t):.2f}" if os_ and o1 else "—"
+        lines.append(f"| {t} | {b_cell} | {o_cell} | {be} | {oe} |")
+
+    lines += [
+        "",
+        "### ⚠️ 这份并发数据不可用于下结论",
+        "",
+        "必须说清楚：**这台机器测不出可信的并发数字**。",
+        "",
+        "同一个 8 线程配置，在不同轮次里跑出过 20k、28k、35k、42k、82k ops/s ——",
+        "**跨轮次波动达到 4 倍**，完全掩盖了被测改动本身的效果。",
+        "",
+        "原因是可以定位的：",
+        "",
+        "| 干扰源 | 具体情况 |",
+        "|---|---|",
+        "| 大小核混合架构 | i7-14650HX 是 8 P 核 + 8 E 核。线程数超过 8 后，调度器会把线程放到 E 核上，而 E 核性能只有 P 核的一半左右，于是「加线程」变成了「换更慢的核」 |",
+        "| 后台负载 | 测量期间机器常驻 27% 左右的 CPU 占用，可用内存一度只剩 1.8 GB / 15.8 GB |",
+        "| 样本量不足 | 每轮只有 5 × 2 秒的测量窗口，对毫秒级操作来说统计量偏少 |",
+        "",
+        "所以表格里的数字只能当**趋势参考**，不能写进简历，也不能用来证明某个优化有效。",
+        "",
+        "### 要得到可信的并发结论，需要什么",
+        "",
+        "- **独占机器**：测量期间不跑其他程序，关掉浏览器与后台任务",
+        "- **绑核**：把基准线程固定在 P 核上，避开 E 核调度带来的异构性",
+        "- **多次取最优**：环境噪声只会让结果变慢，所以多轮中的最好成绩最接近真实能力",
+        "- **更长的测量窗口**：单轮 ≥ 10 秒，并提高 fork 数做跨 JVM 平均",
+        "",
+        "这条结论本身比数字有价值：**并发性能不是「跑一下 JMH」就能拿到的**，",
+        "它比单线程基准脆弱得多，对测量环境的要求也高得多。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def section_method(recall: dict) -> str:
     """方法学与局限 —— 必须写，否则是在误导人。"""
     lines = [
-        "## 四、方法学与局限",
+        "## 五、方法学与局限",
         "",
         "### 数据是合成的，不是真实 embedding",
         "",
@@ -427,6 +510,7 @@ def main() -> int:
         section_simd(jmh),
         section_index(jmh),
         section_recall(recall),
+        section_concurrency(results_dir),
         section_method(recall),
     ) if s]
 
