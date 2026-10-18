@@ -119,6 +119,8 @@ def main() -> int:
     parser.add_argument("--mode", default=None,
                         choices=["vector", "bm25", "hybrid"],
                         help="检索模式。用来公平对比三条路线，不传则用服务端默认值")
+    parser.add_argument("--rerank", action="store_true",
+                        help="开启二阶段精排。会显著增加延迟（CPU 上每个候选一次前向计算）")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 条（快速冒烟）")
     parser.add_argument("--repeat", type=int, default=1, help="重复轮数")
     parser.add_argument("--label", default="", help="本次运行的标签，写进报告标题")
@@ -157,6 +159,8 @@ def main() -> int:
                 payload["efSearch"] = args.ef_search
             if args.mode is not None:
                 payload["mode"] = args.mode
+            if args.rerank:
+                payload["rerank"] = True
             try:
                 response = post_json(f"{args.service}/api/search", payload, args.timeout)
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -189,6 +193,7 @@ def main() -> int:
         "top_k": args.top_k,
         "ef_search": args.ef_search,
         "mode": args.mode or "服务端默认",
+        "rerank": args.rerank,
         "query_count": len(queries),
         "repeat": args.repeat,
         "evaluations": evaluation_count,

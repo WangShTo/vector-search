@@ -32,20 +32,26 @@ public record VectorSearchProperties(
             index = new Index(512, 16, 200, 100, "./data/index");
         }
         if (search == null) {
-            search = new Search("hybrid", 50, 60);
+            search = new Search("hybrid", 50, 60, false, 20);
         }
     }
 
     /**
-     * 检索模式与融合参数。
+     * 检索模式、融合与精排参数。
      *
-     * @param defaultMode   请求不指定 mode 时用哪个：{@code vector} / {@code bm25} / {@code hybrid}
-     * @param candidatePool 融合前每一路召回多少条。太小会让融合没得挑，
-     *                      太大会把噪声也带进来。50 是常见起点。
-     * @param rrfK          RRF 平滑常数。见 {@link com.vectorsearch.core.fusion.RrfFusion}，
-     *                      60 是原论文经验值，对结果不敏感。
+     * @param defaultMode      请求不指定 mode 时用哪个：{@code vector} / {@code bm25} / {@code hybrid}
+     * @param candidatePool    融合前每一路召回多少条。太小会让融合没得挑，
+     *                         太大会把噪声也带进来。50 是常见起点。
+     * @param rrfK             RRF 平滑常数。见 {@link com.vectorsearch.core.fusion.RrfFusion}，
+     *                         60 是原论文经验值，对结果不敏感。
+     * @param rerankDefault    请求不指定 rerank 时是否默认做精排。
+     *                         <b>默认关</b> —— 精排要在 CPU 上对每个候选跑一次
+     *                         cross-encoder 前向，是数量级的延迟代价，应该显式开启。
+     * @param rerankCandidates 精排多少条候选。这是延迟与精度的主旋钮：
+     *                         20 条时 CPU 上大约几百毫秒，50 条就要一秒以上。
      */
-    public record Search(String defaultMode, int candidatePool, int rrfK) {
+    public record Search(String defaultMode, int candidatePool, int rrfK,
+                         boolean rerankDefault, int rerankCandidates) {
         public Search {
             if (defaultMode == null || defaultMode.isBlank()) {
                 defaultMode = "hybrid";
@@ -55,6 +61,9 @@ public record VectorSearchProperties(
             }
             if (rrfK <= 0) {
                 rrfK = 60;
+            }
+            if (rerankCandidates <= 0) {
+                rerankCandidates = 20;
             }
             if (!defaultMode.equals("vector")
                     && !defaultMode.equals("bm25")

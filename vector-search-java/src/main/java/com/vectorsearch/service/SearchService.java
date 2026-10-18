@@ -6,9 +6,13 @@ import com.vectorsearch.api.dto.SearchHit;
 import com.vectorsearch.api.dto.SearchRequest;
 import com.vectorsearch.api.dto.SearchResponse;
 import com.vectorsearch.client.ModelServiceClient;
+import com.vectorsearch.client.ModelServiceException;
+import com.vectorsearch.client.dto.RerankResponse;
 import com.vectorsearch.config.VectorSearchProperties;
 import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.fusion.RrfFusion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -36,6 +40,8 @@ import java.util.List;
  */
 @Service
 public class SearchService {
+
+    private static final Logger log = LoggerFactory.getLogger(SearchService.class);
 
     /** 只用稠密向量检索。 */
     public static final String MODE_VECTOR = "vector";
@@ -74,6 +80,10 @@ public class SearchService {
                 ? request.efSearch()
                 : properties.index().efSearch();
 
+        boolean rerankRequested = request.rerank() != null
+                ? request.rerank()
+                : properties.search().rerankDefault();
+
         List<SearchResult> denseHits = null;
         List<SearchResult> sparseHits = null;
 
@@ -81,29 +91,84 @@ public class SearchService {
         boolean needDense = MODE_VECTOR.equals(mode) || MODE_HYBRID.equals(mode);
         boolean needSparse = MODE_BM25.equals(mode) || MODE_HYBRID.equals(mode);
 
-        // 把「编码」与「检索 + 融合」分成两段计时：
-        // 编码是跨进程调用，检索是本地计算，两者的优化手段完全不同，
+        // 把「编码」与「检索 + 融合 + 精排」分成两段计时：
+        // 编码是跨进程调用，后面是本地计算与另一类模型调用，优化手段完全不同，
         // 混在一起报就没法定位瓶颈了。
+        long embeddingEndsAt = start;
         if (needDense) {
             float[][] embedded = modelServiceClient.embed(List.of(request.query()));
-            long afterEmbedding = System.nanoTime();
-
-            long searchStart = System.nanoTime();
+            embeddingEndsAt = System.nanoTime();
             denseHits = indexManager.search(embedded[0], pool, efSearch);
-            if (needSparse) {
-                sparseHits = sparseIndexManager.search(request.query(), pool);
-            }
-            List<SearchResult> fused = fuse(mode, denseHits, sparseHits, topK);
-            long afterSearch = System.nanoTime();
+        }
+        if (needSparse) {
+            sparseHits = sparseIndexManager.search(request.query(), pool);
+        }
+        long searchStart = needDense ? embeddingEndsAt : start;
 
-            return respond(request.query(), mode, fused, start, afterEmbedding, searchStart, afterSearch);
+        // 第一阶段：召回 + 融合
+        List<SearchResult> results = fuse(mode, denseHits, sparseHits, topK);
+
+        // 第二阶段：精排
+        boolean reranked = false;
+        if (rerankRequested && results.size() > 1) {
+            try {
+                results = applyRerank(request.query(), results, topK);
+                reranked = true;
+            } catch (ModelServiceException e) {
+                // 精排是增强而不是必需：模型服务挂了也应该把召回结果返回去，
+                // 而不是整个查询失败。降级会体现在响应里的 reranked=false。
+                log.warn("精排失败，返回未精排的结果: {}", e.getMessage());
+            }
+        }
+        long end = System.nanoTime();
+
+        return respond(request.query(), mode, reranked, results, start, embeddingEndsAt, searchStart, end);
+    }
+
+    /**
+     * 二阶段精排：用 cross-encoder 对候选重新打分。
+     *
+     * <p><b>为什么值得多花这一百多毫秒</b>：向量检索是双塔结构，
+     * 查询和文档<b>各自独立</b>编码成向量再算内积 —— 编码时两者没见过彼此，
+     * 细粒度的语义交互全部丢失。cross-encoder 把 (查询, 文档) 拼在一起送进模型，
+     * 能做完整的注意力交互，精度明显更高。
+     *
+     * <p>代价是它没法预先建索引：每来一个查询，都要对每个候选跑一次前向。
+     * 所以必须先由召回阶段把候选压到几十条，这就是两阶段检索的分工。
+     *
+     * @return 精排后的结果；候选不足时原样返回
+     */
+    private List<SearchResult> applyRerank(String query, List<SearchResult> candidates, int topK) {
+        int pool = Math.min(candidates.size(), properties.search().rerankCandidates());
+        List<SearchResult> head = candidates.subList(0, pool);
+
+        List<String> texts = new ArrayList<>(pool);
+        for (SearchResult candidate : head) {
+            // 原文缺失时用空串：reranker 会给它很低的分数，自然排到后面去，
+            // 比直接跳过更可预测
+            texts.add(documentStore.get(candidate.id()).orElse(""));
         }
 
-        // 纯 BM25：没有编码阶段
-        sparseHits = sparseIndexManager.search(request.query(), pool);
-        List<SearchResult> fused = fuse(mode, null, sparseHits, topK);
-        long end = System.nanoTime();
-        return respond(request.query(), mode, fused, start, start, start, end);
+        // 让 reranker 把所有候选都排一遍（而不是只要 topK），
+        // 这样候选不足 topK 时也不会丢结果
+        List<RerankResponse.Item> ranked = modelServiceClient.rerank(query, texts, pool);
+        if (ranked.isEmpty()) {
+            return candidates;
+        }
+
+        List<SearchResult> reranked = new ArrayList<>(ranked.size());
+        for (RerankResponse.Item item : ranked) {
+            SearchResult source = head.get(item.index());
+            // 分数换成 cross-encoder 的相关性分数 —— 与余弦相似度、RRF 分数
+            // 都不是一个量纲，所以响应里用 reranked 标记区分
+            reranked.add(new SearchResult(source.id(), item.score()));
+        }
+
+        // 被精排截断掉的尾巴接在后面：宁可多给调用方几条，也不要凭空丢结果
+        if (candidates.size() > pool) {
+            reranked.addAll(candidates.subList(pool, candidates.size()));
+        }
+        return reranked.size() > topK ? new ArrayList<>(reranked.subList(0, topK)) : reranked;
     }
 
     /** 按模式决定融合方式。 */
@@ -126,9 +191,10 @@ public class SearchService {
 
     private SearchResponse respond(String query,
                                    String mode,
+                                   boolean reranked,
                                    List<SearchResult> results,
                                    long start,
-                                   long afterEmbedding,
+                                   long embeddingEndsAt,
                                    long searchStart,
                                    long end) {
         List<SearchHit> hits = new ArrayList<>(results.size());
@@ -141,10 +207,11 @@ public class SearchService {
         return new SearchResponse(
                 query,
                 mode,
+                reranked,
                 hits,
                 indexManager.indexType(),
                 new SearchResponse.Timing(
-                        toMillis(afterEmbedding - start),
+                        toMillis(embeddingEndsAt - start),
                         toMillis(end - searchStart),
                         toMillis(end - start)));
     }

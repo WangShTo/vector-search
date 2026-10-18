@@ -89,6 +89,43 @@ def main() -> int:
         "summary": summary,
     }
 
+    # ---------- 精排前后对比 ----------
+    # 精排的作用是"重新排序"，不是"召回更多"，所以预期是：
+    # recall / 命中率基本不变，而 MRR / NDCG 明显提升。
+    rerank_lexical_files = sorted(results_dir.glob("*-hybrid-rerank.json"))
+    rerank_semantic_path = results_dir / "semantic-eval-rerank.json"
+    if rerank_lexical_files and rerank_semantic_path.exists():
+        rerank_lexical = json.loads(rerank_lexical_files[-1].read_text(encoding="utf-8"))
+        rerank_semantic = json.loads(rerank_semantic_path.read_text(encoding="utf-8"))
+        comparison["rerank"] = {
+            "lexical": {
+                "baseline": {
+                    "recall": lexical["hybrid"]["recall"],
+                    "mrr": lexical["hybrid"]["mrr"],
+                    "ndcg": lexical["hybrid"]["ndcg"],
+                    "p50": lexical["hybrid"]["p50_total_ms"],
+                },
+                "reranked": {
+                    "recall": rerank_lexical["recall"],
+                    "mrr": rerank_lexical["mrr"],
+                    "ndcg": rerank_lexical["ndcg"],
+                    "p50": rerank_lexical["latency"]["total_p50"],
+                },
+            },
+            "semantic": {
+                "baseline": {
+                    "hit": semantic["hybrid"]["hit"],
+                    "mrr": semantic["hybrid"]["mrr"],
+                    "p50": semantic["hybrid"]["p50"],
+                },
+                "reranked": {
+                    "hit": rerank_semantic["hybrid"]["hit"],
+                    "mrr": rerank_semantic["hybrid"]["mrr"],
+                    "p50": rerank_semantic["hybrid"]["p50"],
+                },
+            },
+        }
+
     output = results_dir / "mode-comparison.json"
     output.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -105,6 +142,14 @@ def main() -> int:
     best_worst = max(MODES, key=lambda m: summary[m]["worst"])
     print()
     print(f"  平均最好: {best_avg}    最差情况最好: {best_worst}")
+
+    if "rerank" in comparison:
+        print()
+        print("  精排前后（hybrid）：")
+        for name, label in [("lexical", "词面"), ("semantic", "语义")]:
+            r = comparison["rerank"][name]
+            print(f"    {label}: MRR {r['baseline']['mrr']:.4f} -> {r['reranked']['mrr']:.4f}"
+                  f"   P50 {r['baseline']['p50']:.0f}ms -> {r['reranked']['p50']:.0f}ms")
     return 0
 
 

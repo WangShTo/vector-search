@@ -65,6 +65,8 @@ def main() -> int:
     parser.add_argument("--service", default="http://127.0.0.1:8080")
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--modes", default="vector,bm25,hybrid")
+    parser.add_argument("--rerank", action="store_true",
+                        help="开启二阶段精排（会显著增加延迟）")
     parser.add_argument("--timeout", type=float, default=60.0)
     args = parser.parse_args()
 
@@ -99,6 +101,8 @@ def main() -> int:
         for item in queries:
             targets = set(item["relevant_sources"])
             payload = {"query": item["query"], "topK": args.top_k, "mode": mode}
+            if args.rerank:
+                payload["rerank"] = True
             try:
                 response = post_json(f"{args.service}/api/search", payload, args.timeout)
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -144,7 +148,10 @@ def main() -> int:
     print("  它的作用是和主评测集（150 条词面查询）交叉验证 ——")
     print("  单看任何一边都会得出偏颇的结论。")
 
-    output = Path("bench/results/semantic-eval.json")
+    # 精排与不精排分开写文件，否则后一次会覆盖前一次，
+    # 就没法对比"加精排前后"的差异了
+    output = Path("bench/results/semantic-eval-rerank.json" if args.rerank
+                  else "bench/results/semantic-eval.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n  结果已写入: {output}")

@@ -17,6 +17,7 @@ import java.util.List;
 public record SearchResponse(
         String query,
         String mode,
+        Boolean reranked,
         List<SearchHit> hits,
         String indexType,
         Timing timing

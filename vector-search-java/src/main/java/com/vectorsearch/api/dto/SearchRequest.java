@@ -35,7 +35,16 @@ public record SearchRequest(
          */
         @Pattern(regexp = "vector|bm25|hybrid",
                 message = "mode 只能是 vector / bm25 / hybrid")
-        String mode
+        String mode,
+
+        /**
+         * 是否做二阶段精排。不传则用配置里的默认值（默认关）。
+         *
+         * <p>精排用 cross-encoder 把 (查询, 文档) 拼在一起送进模型，
+         * 精度明显高于向量内积，但要对每个候选跑一次前向计算 ——
+         * 是数量级的延迟代价，所以默认不开启。
+         */
+        Boolean rerank
 ) {
 
     public int topKOrDefault() {

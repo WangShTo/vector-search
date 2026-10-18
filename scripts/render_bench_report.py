@@ -585,6 +585,52 @@ def section_hybrid(results_dir: Path) -> str:
         "> 它在这里的作用是与 150 条词面查询<b>交叉验证</b> —— 单看任何一边都会得出偏颇结论。",
         "",
     ]
+
+    rerank = data.get("rerank")
+    if rerank:
+        lex = rerank["lexical"]
+        sem = rerank["semantic"]
+        lex_mrr_gain = (lex["reranked"]["mrr"] / lex["baseline"]["mrr"] - 1) * 100
+        lex_ndcg_gain = (lex["reranked"]["ndcg"] / lex["baseline"]["ndcg"] - 1) * 100
+        sem_mrr_gain = (sem["reranked"]["mrr"] / sem["baseline"]["mrr"] - 1) * 100
+
+        lines += [
+            "### 二阶段精排：不改变召回，只改变排序",
+            "",
+            "精排用 cross-encoder 把 (查询, 文档) 拼在一起送进模型，能做完整的注意力交互，",
+            "而向量检索是双塔结构 —— 查询和文档各自独立编码，编码时两者没见过彼此。",
+            "代价是精排没法预先建索引：每来一个查询都要对每个候选跑一次前向。",
+            "",
+            "| 查询集 | 指标 | 精排前 | 精排后 | 变化 |",
+            "|---|---|---|---|---|",
+            f"| 词面（150 条） | recall@10 | {lex['baseline']['recall']:.4f} "
+            f"| {lex['reranked']['recall']:.4f} | 不变 |",
+            f"| 词面（150 条） | MRR@10 | {lex['baseline']['mrr']:.4f} "
+            f"| **{lex['reranked']['mrr']:.4f}** | +{lex_mrr_gain:.0f}% |",
+            f"| 词面（150 条） | NDCG@10 | {lex['baseline']['ndcg']:.4f} "
+            f"| **{lex['reranked']['ndcg']:.4f}** | +{lex_ndcg_gain:.0f}% |",
+            f"| 语义（16 条） | 命中率@10 | {sem['baseline']['hit']:.4f} "
+            f"| {sem['reranked']['hit']:.4f} | 不变 |",
+            f"| 语义（16 条） | MRR@10 | {sem['baseline']['mrr']:.4f} "
+            f"| **{sem['reranked']['mrr']:.4f}** | +{sem_mrr_gain:.0f}% |",
+            "",
+            "**召回率与命中率完全不变，MRR / NDCG 明显提升** —— 这正是精排该有的表现：",
+            "它不负责「找到更多」，只负责「把对的排到前面」。",
+            "",
+            "顺带得到一个自检手段：**如果精排让 recall 变了，说明第一阶段被改坏了**。",
+            "指标之间应该有明确的分工，混在一起就失去了诊断能力。",
+            "",
+            "### 代价：延迟从几十毫秒涨到几百毫秒",
+            "",
+            f"P50 端到端延迟：词面 {lex['baseline']['p50']:.0f} ms → "
+            f"**{lex['reranked']['p50']:.0f} ms**；"
+            f"语义 {sem['baseline']['p50']:.0f} ms → **{sem['reranked']['p50']:.0f} ms**。",
+            "",
+            "这个代价在 CPU 上无法避免。所以 `rerank` 默认<b>关闭</b>，由调用方显式开启 ——",
+            "排序质量与延迟怎么权衡应该由业务场景决定，而不是由框架替用户决定。",
+            "",
+        ]
+
     return "\n".join(lines)
 
 

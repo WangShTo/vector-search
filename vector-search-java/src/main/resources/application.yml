@@ -40,6 +40,11 @@ vector-search:
     candidate-pool: 50
     # RRF 平滑常数，60 是原论文经验值，对结果不敏感
     rrf-k: 60
+    # 请求不指定 rerank 时是否默认精排。默认关 ——
+    # 精排要在 CPU 上对每个候选跑一次 cross-encoder，是数量级的延迟代价
+    rerank-default: false
+    # 精排多少条候选。延迟与精度的主旋钮：20 条约几百毫秒，50 条要一秒以上
+    rerank-candidates: 20
 
 logging:
   level:
