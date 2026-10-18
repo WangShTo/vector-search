@@ -11,6 +11,7 @@
 - [这个项目在做什么](#这个项目在做什么)
 - [架构](#架构)
 - [快速开始](#快速开始)
+- [演示页面](#演示页面)
 - [API 示例](#api-示例)
 - [设计取舍（面试弹药）](#设计取舍面试弹药)
 - [评测方法](#评测方法)
@@ -154,6 +155,54 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 ```powershell
 Invoke-WebRequest 'https://aka.ms/download-jdk/microsoft-jdk-21-windows-x64.zip' -OutFile jdk21.zip
 ```
+
+---
+
+## 演示页面
+
+服务起来后直接打开 **<http://localhost:8080/>** —— 页面由 Spring Boot 的静态资源目录托管，没有构建步骤，也没有前端框架。
+
+### 单模式检索
+
+![单模式检索](docs/screenshots/demo-hybrid.png)
+
+除了结果本身，页面上还有两个刻意的设计：
+
+- **阶段耗时条**：把「跨进程编码」和「本地检索」分开显示。如果编码远大于检索，说明瓶颈在网络往返而不是索引——**这时候去调 HNSW 参数是南辕北辙**。这句话会直接显示在页面下方，避免看的人误判。
+- **分数条是本次结果内的相对值**。不同模式的分数完全不可比：余弦在 `[-1, 1]`、BM25 无上界、RRF 只看排名、cross-encoder 又是另一个量纲。这正是融合时必须用 RRF 而不是加权求和的原因。
+
+### 三路对比（核心）
+
+![三路对比](docs/screenshots/demo-compare.png)
+
+按下「三路对比」（或 `Ctrl`+`Enter`），同一个查询会**同时**跑 `vector` / `bm25` / `hybrid` 三种模式并排展示。
+
+这一屏把整个混合检索的故事讲完了：
+
+- 三条路线对同一句查询给出了**不同的结果**——这是它们互补的直接证据
+- 紫色「唯一命中」标签标出只有某一路能找到的文档
+- 每列顶部是各自的服务端耗时：`bm25` 常常是 `<1 ms`，因为它**完全不调用模型服务**
+
+这同时也是那条降级路径的可视化：模型服务挂掉时，检索能以 BM25 模式继续工作。
+
+### 精排
+
+![精排](docs/screenshots/demo-rerank.png)
+
+打开「精排」后，检索段从几十毫秒涨到一秒多（CPU 上每个候选一次 cross-encoder 前向），
+结果顺序会明显变化。页面下方的提示也会自动改口为「检索段占了主要开销」。
+
+### 深链
+
+页面支持用 URL 直接带查询打开，方便分享一次具体的检索：
+
+```
+http://localhost:8080/?q=efSearch%20参数是干什么的&mode=bm25
+http://localhost:8080/?q=为什么测代码速度不能只跑一遍&compare=1
+http://localhost:8080/?q=读得多写得少的时候该选哪种同步方式&mode=hybrid&rerank=1
+```
+
+支持 `q` / `mode` / `rerank=1` / `compare=1` 四个参数。
 
 ---
 
@@ -459,7 +508,8 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [ ] `StampedLock` 乐观读（前置条件「读路径无共享写入」已完成）
 - [ ] 在独占机器上取得可信的并发基准（当前机器噪声过大，见报告第四节）
 - [ ] Docker 镜像验证 + CI
-- [ ] 前端 demo 页面
+- [x] 演示页面（原生 HTML/CSS/JS，单文件无构建；含三路对比与阶段耗时条）
+- [ ] Docker 镜像验证 + CI
 
 ---
 
@@ -485,6 +535,9 @@ vector-search/
 │       │   ├── service/          #   索引管理 / 文档存储 / 检索编排
 │       │   ├── api/              #   REST 接口、DTO、异常处理
 │       │   └── config/           #   配置绑定
+│       ├── main/resources/
+│       │   ├── application.yml   #   配置（索引参数 / 检索模式 / 精排开关）
+│       │   └── static/index.html #   演示页面（原生 HTML/CSS/JS，单文件无构建）
 │       └── test/java/com/vectorsearch/
 │           ├── core/             #   单元测试（含 recall 对照）
 │           └── bench/            #   JMH 基准 + 召回率扫描器 + 数据生成器
@@ -510,7 +563,11 @@ vector-search/
 │
 ├── eval/                         # ── 检索质量评测 ──
 │   ├── build_dataset.py          #   语料 → 分块（两种策略）→ 带标注查询
-│   └── evaluate.py               #   recall@k / MRR / NDCG / P50-P99 延迟报告
+│   ├── evaluate.py               #   recall@k / MRR / NDCG / P50-P99 延迟报告
+│   ├── evaluate_semantic.py      #   按来源文件评测语义查询
+│   ├── semantic-queries.jsonl    #   16 条人工改写的语义查询（人工维护）
+│   ├── compare_modes.py          #   把两套查询的结果汇总成三模式对比
+│   └── assemble_corpus.py        #   组装评测语料（项目文档 + 源码，不入库）
 │
 ├── bench/                        # ── 基准产出 ──
 │   ├── REPORT.md                 #   自动生成的报告（脚本产物，勿手改）
@@ -518,7 +575,9 @@ vector-search/
 │
 ├── docs/                         # ── 交给别人的东西 ──
 │   ├── architecture.html         #   系统架构图（可交互，直接打开）
+│   ├── architecture.png          #   同一张图的静态版（README 内嵌）
 │   ├── architecture.source.json  #   图的源文件，改完可重新生成
+│   ├── screenshots/              #   演示页面截图（README 内嵌）
 │   └── RESUME.md                 #   简历文案与面试问答
 │
 ├── data/
@@ -534,6 +593,7 @@ vector-search/
 
 | 产出 | 位置 | 生成方式 |
 |---|---|---|
+| **演示页面** | <http://localhost:8080/> | 服务启动后直接打开，无构建步骤 |
 | **系统架构图** | `docs/architecture.html` | 可缩放 / 深浅色 / 导出图片，直接双击打开 |
 | 基准报告（数字来源） | `bench/REPORT.md` | `.\scripts\run_bench.ps1` |
 | 改造前后对比 | 终端输出 | `python scripts/compare_bench.py --before ... --after ...` |
