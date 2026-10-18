@@ -2,9 +2,9 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "向量检索服务 —— 系统架构",
+    "title": "向量检索服务 —— 完整检索链路",
     "locale": "zh-CN",
-    "output": ".archify/architecture-vector-search-20261015-211224/vector-search.html",
+    "output": ".archify/architecture-vector-search-20261018-171500/vector-search.html",
     "quality_profile": "showcase"
   },
   "components": [
@@ -12,127 +12,25 @@
       "id": "client",
       "type": "external",
       "label": "客户端",
-      "sublabel": "curl / 前端 demo",
-      "pos": [
-        30,
-        420
-      ],
-      "size": [
-        120,
-        60
-      ]
+      "sublabel": "curl / demo 页面",
+      "pos": [20, 520],
+      "size": [130, 60]
     },
     {
       "id": "api",
       "type": "backend",
       "label": "REST 接口层",
       "sublabel": "SearchController",
-      "pos": [
-        240,
-        420
-      ],
-      "size": [
-        150,
-        60
-      ]
+      "pos": [230, 520],
+      "size": [160, 60]
     },
     {
       "id": "service",
       "type": "backend",
       "label": "检索编排",
-      "sublabel": "SearchService",
-      "pos": [
-        480,
-        420
-      ],
-      "size": [
-        160,
-        60
-      ]
-    },
-    {
-      "id": "modelClient",
-      "type": "backend",
-      "label": "模型服务客户端",
-      "sublabel": "ModelServiceClient",
-      "pos": [
-        480,
-        260
-      ],
-      "size": [
-        160,
-        60
-      ]
-    },
-    {
-      "id": "indexMgr",
-      "type": "backend",
-      "label": "索引管理",
-      "sublabel": "VectorIndexManager",
-      "pos": [
-        730,
-        420
-      ],
-      "size": [
-        160,
-        60
-      ]
-    },
-    {
-      "id": "hnsw",
-      "type": "backend",
-      "label": "HNSW 索引引擎",
-      "sublabel": "自研 · 分层邻近图",
-      "pos": [
-        980,
-        420
-      ],
-      "size": [
-        180,
-        60
-      ]
-    },
-    {
-      "id": "docStore",
-      "type": "database",
-      "label": "文档原文存储",
-      "sublabel": "id 到文本映射",
-      "pos": [
-        480,
-        560
-      ],
-      "size": [
-        160,
-        60
-      ]
-    },
-    {
-      "id": "bruteForce",
-      "type": "backend",
-      "label": "暴力检索",
-      "sublabel": "正确性基准 · 对照组",
-      "pos": [
-        730,
-        560
-      ],
-      "size": [
-        160,
-        60
-      ]
-    },
-    {
-      "id": "distance",
-      "type": "backend",
-      "label": "距离计算",
-      "sublabel": "标量 / Vector API",
-      "pos": [
-        980,
-        560
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "sublabel": "编排两路召回与融合",
+      "pos": [470, 520],
+      "size": [180, 60]
     },
     {
       "id": "modelService",
@@ -140,53 +38,79 @@
       "label": "FastAPI 模型服务",
       "sublabel": "独立 Python 进程",
       "tag": ":8000",
-      "pos": [
-        475,
-        80
-      ],
-      "size": [
-        170,
-        60
-      ]
-    },
-    {
-      "id": "batcher",
-      "type": "backend",
-      "label": "动态批处理",
-      "sublabel": "攒批后一次 forward",
-      "pos": [
-        715,
-        80
-      ],
-      "size": [
-        140,
-        60
-      ]
+      "pos": [470, 100],
+      "size": [180, 60]
     },
     {
       "id": "bge",
       "type": "backend",
       "label": "BGE-small-zh",
-      "sublabel": "512 维 · 已归一化",
-      "pos": [
-        945,
-        80
-      ],
-      "size": [
-        160,
-        60
-      ]
+      "sublabel": "512 维 · 双塔",
+      "pos": [720, 100],
+      "size": [170, 60]
+    },
+    {
+      "id": "reranker",
+      "type": "backend",
+      "label": "BGE reranker",
+      "sublabel": "单塔 · Cross-Encoder",
+      "pos": [720, 220],
+      "size": [170, 60]
+    },
+    {
+      "id": "sparseIdx",
+      "type": "backend",
+      "label": "BM25 稀疏索引",
+      "sublabel": "二元组分词 · 倒排表",
+      "pos": [740, 400],
+      "size": [180, 70]
+    },
+    {
+      "id": "denseIdx",
+      "type": "backend",
+      "label": "HNSW 稠密索引",
+      "sublabel": "自研 · 分层邻近图 · SIMD",
+      "pos": [740, 520],
+      "size": [180, 70]
+    },
+    {
+      "id": "rrf",
+      "type": "backend",
+      "label": "RRF 融合",
+      "sublabel": "只看排名不看分数",
+      "pos": [1010, 465],
+      "size": [150, 60]
+    },
+    {
+      "id": "rerank",
+      "type": "backend",
+      "label": "精排编排",
+      "sublabel": "applyRerank",
+      "pos": [1210, 465],
+      "size": [160, 60]
+    },
+    {
+      "id": "docStore",
+      "type": "database",
+      "label": "文档原文",
+      "sublabel": "documents.jsonl",
+      "pos": [470, 680],
+      "size": [180, 60]
+    },
+    {
+      "id": "snapshot",
+      "type": "database",
+      "label": "索引快照",
+      "sublabel": "vector-index.snapshot",
+      "pos": [740, 720],
+      "size": [180, 60]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
       "label": "Python 模型服务进程",
-      "wraps": [
-        "modelService",
-        "batcher",
-        "bge"
-      ],
+      "wraps": ["modelService", "bge", "reranker"],
       "pad": 40
     },
     {
@@ -195,12 +119,12 @@
       "wraps": [
         "api",
         "service",
-        "modelClient",
-        "indexMgr",
-        "hnsw",
+        "sparseIdx",
+        "denseIdx",
+        "rrf",
+        "rerank",
         "docStore",
-        "bruteForce",
-        "distance"
+        "snapshot"
       ],
       "pad": 40
     }
@@ -220,33 +144,55 @@
       "label": "参数校验"
     },
     {
-      "id": "service-to-modelclient",
+      "id": "service-to-model",
       "from": "service",
-      "to": "modelClient",
-      "label": "编码",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "modelclient-to-modelservice",
-      "from": "modelClient",
       "to": "modelService",
-      "label": "HTTP 批量 /embed",
-      "variant": "emphasis",
-      "fromSide": "top",
-      "toSide": "bottom"
+      "label": "HTTP /embed /rerank",
+      "variant": "emphasis"
     },
     {
-      "id": "service-to-indexmgr",
+      "id": "model-to-bge",
+      "from": "modelService",
+      "to": "bge",
+      "label": "批量编码"
+    },
+    {
+      "id": "model-to-reranker",
+      "from": "modelService",
+      "to": "reranker",
+      "label": "精排打分",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "service-to-dense",
       "from": "service",
-      "to": "indexMgr",
-      "label": "检索"
+      "to": "denseIdx",
+      "label": "稠密召回"
     },
     {
-      "id": "indexmgr-to-hnsw",
-      "from": "indexMgr",
-      "to": "hnsw",
-      "label": "委托"
+      "id": "service-to-sparse",
+      "from": "service",
+      "to": "sparseIdx",
+      "label": "稀疏召回"
+    },
+    {
+      "id": "dense-to-rrf",
+      "from": "denseIdx",
+      "to": "rrf",
+      "label": "稠密候选"
+    },
+    {
+      "id": "sparse-to-rrf",
+      "from": "sparseIdx",
+      "to": "rrf",
+      "label": "稀疏候选"
+    },
+    {
+      "id": "rrf-to-rerank",
+      "from": "rrf",
+      "to": "rerank",
+      "label": "重排序"
     },
     {
       "id": "service-to-docstore",
@@ -257,68 +203,50 @@
       "toSide": "top"
     },
     {
-      "id": "indexmgr-to-bruteforce",
-      "from": "indexMgr",
-      "to": "bruteForce",
-      "label": "对照组",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "variant": "dashed"
-    },
-    {
-      "id": "hnsw-to-distance",
-      "from": "hnsw",
-      "to": "distance",
-      "label": "SIMD 内积",
+      "id": "dense-to-snapshot",
+      "from": "denseIdx",
+      "to": "snapshot",
+      "label": "落盘 / 恢复",
       "fromSide": "bottom",
       "toSide": "top"
-    },
-    {
-      "id": "modelservice-to-batcher",
-      "from": "modelService",
-      "to": "batcher",
-      "label": "入队"
-    },
-    {
-      "id": "batcher-to-bge",
-      "from": "batcher",
-      "to": "bge",
-      "label": "批量编码"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "一次检索的路径",
+      "title": "一次检索走的路",
       "items": [
-        "客户端 → REST 接口 → 检索编排 → 索引 → 回填原文",
-        "响应携带分阶段耗时（编码 / 检索），避免优化方向选错"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "跨进程边界：本项目的性能关键",
-      "items": [
-        "Java 与 Python 是两个独立进程，每次调用都是一次网络往返",
-        "/embed 从设计上就是批量接口，把 N 次往返压成 1 次",
-        "实测编码 25 到 38 ms，而索引检索不到 1 ms —— 瓶颈在这里"
+        "客户端 → REST 接口 → 检索编排，然后同时走两条召回",
+        "两条召回的结果由 RRF 融合，再交给精排重新排序",
+        "响应携带分阶段耗时（编码 / 检索 / 融合），避免优化方向选错"
       ]
     },
     {
       "dot": "emerald",
-      "title": "索引核心",
+      "title": "两条召回路线为什么都要",
       "items": [
-        "HNSW 从零实现：分层邻近图 / 贪心下降 / 启发式邻居选择",
-        "暴力检索既是正确性基准，也是所有性能数字的对照组",
-        "距离计算保留标量与 SIMD 双实现，收益可量化（4.97 倍）"
+        "稠密擅长语义泛化：「内存回收」能匹配到「垃圾回收」",
+        "稀疏擅长精确词：efSearch、HNSW 这类标识符只有它能精确命中",
+        "实测：词面查询 BM25 0.96 而向量 0.80；语义查询反转为 0.63 对 0.88"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "精排为什么值得多花几百毫秒",
+      "items": [
+        "向量检索是双塔：查询与文档各自独立编码，编码时两者没见过彼此",
+        "cross-encoder 把两者拼在一起送进模型，能做完整的注意力交互",
+        "实测 MRR 提升 9% 至 14%，而召回率完全不变",
+        "默认关闭：质量与延迟的权衡应由业务决定，不该由框架替用户决定"
       ]
     },
     {
       "dot": "slate",
-      "title": "尚未接入的部分（避免误读）",
+      "title": "持久化解决的不是「省事」",
       "items": [
-        "BM25 + RRF 混合召回、Cross-Encoder 精排：已实现，未接入检索链路",
-        "堆外内存 / StampedLock 乐观读 / 索引持久化：计划中"
+        "10 万条数据重建 HNSW 图要 113 秒，这是每次冷启动都要付的成本",
+        "二进制快照恢复只要 173 毫秒，加速 654 倍",
+        "BM25 不需要快照：从 documents.jsonl 重建即可，比建图便宜几个数量级"
       ]
     }
   ]

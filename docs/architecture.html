@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 3.0.1">
   <meta name="archify-reader-contract" content="declared-wide-v1">
-  <title>向量检索服务 —— 系统架构</title>
+  <title>向量检索服务 —— 完整检索链路</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4978,7 +4978,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="蓝图 / 修订 01"
            data-preset-badge-editorial="编辑风格 / 现场笔记">
         <div class="pulse-dot"></div>
-        <h1>向量检索服务 —— 系统架构</h1>
+        <h1>向量检索服务 —— 完整检索链路</h1>
       </div>
     </div>
 
@@ -4987,8 +4987,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / 图版 04">
-      <svg viewBox="0 0 1240 708" role="img" lang="zh-CN" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
-        <title id="archify-diagram-title">向量检索服务 —— 系统架构</title>
+      <svg viewBox="0 0 1450 868" role="img" lang="zh-CN" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
+        <title id="archify-diagram-title">向量检索服务 —— 完整检索链路</title>
         <desc id="archify-diagram-description">由 Archify 生成的架构图。</desc>
         <!-- Definitions -->
         <defs>
@@ -5013,267 +5013,276 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Python 模型服务进程" x="435" y="40" width="710" height="120" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Python 模型服务进程" x="430" y="60" width="500" height="240" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Java 检索服务进程（Spring Boot）" x="200" y="220" width="1000" height="420" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Java 检索服务进程（Spring Boot）" x="190" y="360" width="1220" height="440" rx="12" class="c-region" stroke-width="1"/>
 
         <!-- Connection paths (before components for correct z-order) -->
         <g data-graph-role="automatic-crossover" style="--step:0">
-          <path data-graph-role="automatic-crossover-underlay" d="M 150 450 L 240 450" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="client" data-edge-to="api" data-edge-label="HTTP JSON" data-edge-key="0" data-edge-id="client-to-api" data-composition-points="150,450;240,450" data-composition-crossover="halo" data-composition-independent="true" d="M 150 450 L 240 450" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 150 550 L 230 550" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="client" data-edge-to="api" data-edge-label="HTTP JSON" data-edge-key="0" data-edge-id="client-to-api" data-composition-points="150,550;230,550" data-composition-crossover="halo" data-composition-independent="true" d="M 150 550 L 230 550" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:1">
-          <path data-graph-role="automatic-crossover-underlay" d="M 390 450 L 480 450" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="api" data-edge-to="service" data-edge-label="参数校验" data-edge-key="1" data-edge-id="api-to-service" data-composition-points="390,450;480,450" data-composition-crossover="halo" data-composition-independent="true" d="M 390 450 L 480 450" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 390 550 L 470 550" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="api" data-edge-to="service" data-edge-label="参数校验" data-edge-key="1" data-edge-id="api-to-service" data-composition-points="390,550;470,550" data-composition-crossover="halo" data-composition-independent="true" d="M 390 550 L 470 550" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:2">
-          <path data-graph-role="automatic-crossover-underlay" d="M 560 420 L 560 320" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="service" data-edge-to="modelClient" data-edge-label="编码" data-edge-key="2" data-edge-id="service-to-modelclient" data-composition-points="560,420;560,320" data-composition-crossover="halo" data-composition-independent="true" d="M 560 420 L 560 320" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 560 520 L 560 225 Q 560 217 552 217 L 467.2 217 Q 459.2 217 459.2 209 L 459.2 84 Q 459.2 76 467.2 76 L 552 76 Q 560 76 560 84 L 560 100" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="service" data-edge-to="modelService" data-edge-label="HTTP /embed /rerank" data-edge-key="2" data-edge-id="service-to-model" data-composition-points="560,520;560,217;459.2,217;459.2,76;560,76;560,100" data-composition-crossover="halo" data-composition-independent="true" d="M 560 520 L 560 225 Q 560 217 552 217 L 467.2 217 Q 459.2 217 459.2 209 L 459.2 84 Q 459.2 76 467.2 76 L 552 76 Q 560 76 560 84 L 560 100" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:3">
-          <path data-graph-role="automatic-crossover-underlay" d="M 560 260 L 560 140" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="modelClient" data-edge-to="modelService" data-edge-label="HTTP 批量 /embed" data-edge-key="3" data-edge-id="modelclient-to-modelservice" data-composition-points="560,260;560,140" data-composition-crossover="halo" data-composition-independent="true" d="M 560 260 L 560 140" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 650 130 L 720 130" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="modelService" data-edge-to="bge" data-edge-label="批量编码" data-edge-key="3" data-edge-id="model-to-bge" data-composition-points="650,130;720,130" data-composition-crossover="halo" data-composition-independent="true" d="M 650 130 L 720 130" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
-          <path data-graph-role="automatic-crossover-underlay" d="M 640 450 L 730 450" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="service" data-edge-to="indexMgr" data-edge-label="检索" data-edge-key="4" data-edge-id="service-to-indexmgr" data-composition-points="640,450;730,450" data-composition-crossover="halo" data-composition-independent="true" d="M 640 450 L 730 450" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 568.05 160 L 568.05 176 Q 568.05 184 576.05 184 L 688 184 Q 696 184 696 192 L 696 242 Q 696 250 704 250 L 720 250" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="modelService" data-edge-to="reranker" data-edge-label="精排打分" data-edge-key="4" data-edge-id="model-to-reranker" data-composition-points="568.05,160;568.05,184;696,184;696,250;720,250" data-composition-crossover="halo" data-composition-independent="true" d="M 568.05 160 L 568.05 176 Q 568.05 184 576.05 184 L 688 184 Q 696 184 696 192 L 696 242 Q 696 250 704 250 L 720 250" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:5">
-          <path data-graph-role="automatic-crossover-underlay" d="M 890 450 L 980 450" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="indexMgr" data-edge-to="hnsw" data-edge-label="委托" data-edge-key="5" data-edge-id="indexmgr-to-hnsw" data-composition-points="890,450;980,450" data-composition-crossover="halo" data-composition-independent="true" d="M 890 450 L 980 450" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 650 557 L 740 557" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="service" data-edge-to="denseIdx" data-edge-label="稠密召回" data-edge-key="5" data-edge-id="service-to-dense" data-composition-points="650,557;740,557" data-composition-crossover="halo" data-composition-independent="true" d="M 650 557 L 740 557" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
-          <path data-graph-role="automatic-crossover-underlay" d="M 560 480 L 560 560" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="service" data-edge-to="docStore" data-edge-label="回填原文" data-edge-key="6" data-edge-id="service-to-docstore" data-composition-points="560,480;560,560" data-composition-crossover="halo" data-composition-independent="true" d="M 560 480 L 560 560" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 544.95 520 L 544.95 504 Q 544.95 496 552.95 496 L 708 496 Q 716 496 716 488 L 716 443 Q 716 435 724 435 L 740 435" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="service" data-edge-to="sparseIdx" data-edge-label="稀疏召回" data-edge-key="6" data-edge-id="service-to-sparse" data-composition-points="544.95,520;544.95,496;716,496;716,435;740,435" data-composition-crossover="halo" data-composition-independent="true" d="M 544.95 520 L 544.95 504 Q 544.95 496 552.95 496 L 708 496 Q 716 496 716 488 L 716 443 Q 716 435 724 435 L 740 435" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
-          <path data-graph-role="automatic-crossover-underlay" d="M 810 480 L 810 560" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="indexMgr" data-edge-to="bruteForce" data-edge-label="对照组" data-edge-key="7" data-edge-id="indexmgr-to-bruteforce" data-composition-points="810,480;810,560" data-composition-crossover="halo" data-composition-independent="true" d="M 810 480 L 810 560" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 920 555 L 957 555 Q 965 555 965 547 L 965 510 Q 965 502 973 502 L 1010 502" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="denseIdx" data-edge-to="rrf" data-edge-label="稠密候选" data-edge-key="7" data-edge-id="dense-to-rrf" data-composition-points="920,555;965,555;965,502;1010,502" data-composition-crossover="halo" data-composition-independent="true" d="M 920 555 L 957 555 Q 965 555 965 547 L 965 510 Q 965 502 973 502 L 1010 502" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
-          <path data-graph-role="automatic-crossover-underlay" d="M 1070 480 L 1070 560" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="hnsw" data-edge-to="distance" data-edge-label="SIMD 内积" data-edge-key="8" data-edge-id="hnsw-to-distance" data-composition-points="1070,480;1070,560" data-composition-crossover="halo" data-composition-independent="true" d="M 1070 480 L 1070 560" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 920 435 L 957 435 Q 965 435 965 443 L 965 480 Q 965 488 973 488 L 1010 488" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="sparseIdx" data-edge-to="rrf" data-edge-label="稀疏候选" data-edge-key="8" data-edge-id="sparse-to-rrf" data-composition-points="920,435;965,435;965,488;1010,488" data-composition-crossover="halo" data-composition-independent="true" d="M 920 435 L 957 435 Q 965 435 965 443 L 965 480 Q 965 488 973 488 L 1010 488" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
-          <path data-graph-role="automatic-crossover-underlay" d="M 645 110 L 715 110" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="modelService" data-edge-to="batcher" data-edge-label="入队" data-edge-key="9" data-edge-id="modelservice-to-batcher" data-composition-points="645,110;715,110" data-composition-crossover="halo" data-composition-independent="true" d="M 645 110 L 715 110" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 1160 495 L 1210 495" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="rrf" data-edge-to="rerank" data-edge-label="重排序" data-edge-key="9" data-edge-id="rrf-to-rerank" data-composition-points="1160,495;1210,495" data-composition-crossover="halo" data-composition-independent="true" d="M 1160 495 L 1210 495" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
-          <path data-graph-role="automatic-crossover-underlay" d="M 855 110 L 945 110" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="batcher" data-edge-to="bge" data-edge-label="批量编码" data-edge-key="10" data-edge-id="batcher-to-bge" data-composition-points="855,110;945,110" data-composition-crossover="halo" data-composition-independent="true" d="M 855 110 L 945 110" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 560 580 L 560 680" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="service" data-edge-to="docStore" data-edge-label="回填原文" data-edge-key="10" data-edge-id="service-to-docstore" data-composition-points="560,580;560,680" data-composition-crossover="halo" data-composition-independent="true" d="M 560 580 L 560 680" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        </g>
+        <g data-graph-role="automatic-crossover" style="--step:11">
+          <path data-graph-role="automatic-crossover-underlay" d="M 830 590 L 830 720" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="denseIdx" data-edge-to="snapshot" data-edge-label="落盘 / 恢复" data-edge-key="11" data-edge-id="dense-to-snapshot" data-composition-points="830,590;830,720" data-composition-crossover="halo" data-composition-independent="true" d="M 830 590 L 830 720" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
 
         <!-- Components -->
-        <g id="node-client" data-node-id="client" data-node-label="客户端" tabindex="0" role="button" aria-label="聚焦客户端，curl / 前端 demo, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="curl / 前端 demo" data-node-context="架构组件">
-          <title>客户端 · curl / 前端 demo · 架构组件</title>
-          <rect x="30" y="420" width="120" height="60" rx="6" class="c-mask"/>
-          <rect x="30" y="420" width="120" height="60" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(36 426) scale(0.6875)">
+        <g id="node-client" data-node-id="client" data-node-label="客户端" tabindex="0" role="button" aria-label="聚焦客户端，curl / demo 页面, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="curl / demo 页面" data-node-context="架构组件">
+          <title>客户端 · curl / demo 页面 · 架构组件</title>
+          <rect x="20" y="520" width="130" height="60" rx="6" class="c-mask"/>
+          <rect x="20" y="520" width="130" height="60" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(26 526) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="90" y="448" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">客户端</text>
-        <text data-detail="context" x="90" y="464" class="t-muted" font-size="9" text-anchor="middle">curl / 前端 demo</text>
+          <text data-node-label="" data-detail-anchor="" x="85" y="548" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">客户端</text>
+        <text data-detail="context" x="85" y="564" class="t-muted" font-size="9" text-anchor="middle">curl / demo 页面</text>
         </g>
 
         <g id="node-api" data-node-id="api" data-node-label="REST 接口层" tabindex="0" role="button" aria-label="聚焦REST 接口层，SearchController, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="SearchController" data-node-context="Java 检索服务进程（Spring Boot）">
           <title>REST 接口层 · SearchController · Java 检索服务进程（Spring Boot）</title>
-          <rect x="240" y="420" width="150" height="60" rx="6" class="c-mask"/>
-          <rect x="240" y="420" width="150" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(246 426) scale(0.6875)">
+          <rect x="230" y="520" width="160" height="60" rx="6" class="c-mask"/>
+          <rect x="230" y="520" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(236 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="315" y="448" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">REST 接口层</text>
-        <text data-detail="context" x="315" y="464" class="t-muted" font-size="9" text-anchor="middle">SearchController</text>
+          <text data-node-label="" data-detail-anchor="" x="310" y="548" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">REST 接口层</text>
+        <text data-detail="context" x="310" y="564" class="t-muted" font-size="9" text-anchor="middle">SearchController</text>
         </g>
 
-        <g id="node-service" data-node-id="service" data-node-label="检索编排" tabindex="0" role="button" aria-label="聚焦检索编排，SearchService, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="SearchService" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>检索编排 · SearchService · Java 检索服务进程（Spring Boot）</title>
-          <rect x="480" y="420" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="480" y="420" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(486 426) scale(0.6875)">
+        <g id="node-service" data-node-id="service" data-node-label="检索编排" tabindex="0" role="button" aria-label="聚焦检索编排，编排两路召回与融合, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="编排两路召回与融合" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>检索编排 · 编排两路召回与融合 · Java 检索服务进程（Spring Boot）</title>
+          <rect x="470" y="520" width="180" height="60" rx="6" class="c-mask"/>
+          <rect x="470" y="520" width="180" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(476 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="560" y="448" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">检索编排</text>
-        <text data-detail="context" x="560" y="464" class="t-muted" font-size="9" text-anchor="middle">SearchService</text>
-        </g>
-
-        <g id="node-modelClient" data-node-id="modelClient" data-node-label="模型服务客户端" tabindex="0" role="button" aria-label="聚焦模型服务客户端，ModelServiceClient, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="ModelServiceClient" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>模型服务客户端 · ModelServiceClient · Java 检索服务进程（Spring Boot）</title>
-          <rect x="480" y="260" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="480" y="260" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(486 266) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="560" y="288" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">模型服务客户端</text>
-        <text data-detail="context" x="560" y="304" class="t-muted" font-size="9" text-anchor="middle">ModelServiceClient</text>
-        </g>
-
-        <g id="node-indexMgr" data-node-id="indexMgr" data-node-label="索引管理" tabindex="0" role="button" aria-label="聚焦索引管理，VectorIndexManager, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="VectorIndexManager" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>索引管理 · VectorIndexManager · Java 检索服务进程（Spring Boot）</title>
-          <rect x="730" y="420" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="730" y="420" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(736 426) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="810" y="448" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">索引管理</text>
-        <text data-detail="context" x="810" y="464" class="t-muted" font-size="9" text-anchor="middle">VectorIndexManager</text>
-        </g>
-
-        <g id="node-hnsw" data-node-id="hnsw" data-node-label="HNSW 索引引擎" tabindex="0" role="button" aria-label="聚焦HNSW 索引引擎，自研 · 分层邻近图, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="自研 · 分层邻近图" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>HNSW 索引引擎 · 自研 · 分层邻近图 · Java 检索服务进程（Spring Boot）</title>
-          <rect x="980" y="420" width="180" height="60" rx="6" class="c-mask"/>
-          <rect x="980" y="420" width="180" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(986 426) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="1070" y="448" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">HNSW 索引引擎</text>
-        <text data-detail="context" x="1070" y="464" class="t-muted" font-size="9" text-anchor="middle">自研 · 分层邻近图</text>
-        </g>
-
-        <g id="node-docStore" data-node-id="docStore" data-node-label="文档原文存储" tabindex="0" role="button" aria-label="聚焦文档原文存储，id 到文本映射, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="database" data-node-sublabel="id 到文本映射" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>文档原文存储 · id 到文本映射 · Java 检索服务进程（Spring Boot）</title>
-          <rect x="480" y="560" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="480" y="560" width="160" height="60" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(486 566) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="560" y="588" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">文档原文存储</text>
-        <text data-detail="context" x="560" y="604" class="t-muted" font-size="9" text-anchor="middle">id 到文本映射</text>
-        </g>
-
-        <g id="node-bruteForce" data-node-id="bruteForce" data-node-label="暴力检索" tabindex="0" role="button" aria-label="聚焦暴力检索，正确性基准 · 对照组, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="正确性基准 · 对照组" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>暴力检索 · 正确性基准 · 对照组 · Java 检索服务进程（Spring Boot）</title>
-          <rect x="730" y="560" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="730" y="560" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(736 566) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="810" y="588" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">暴力检索</text>
-        <text data-detail="context" x="810" y="604" class="t-muted" font-size="9" text-anchor="middle">正确性基准 · 对照组</text>
-        </g>
-
-        <g id="node-distance" data-node-id="distance" data-node-label="距离计算" tabindex="0" role="button" aria-label="聚焦距离计算，标量 / Vector API, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="标量 / Vector API" data-node-context="Java 检索服务进程（Spring Boot）">
-          <title>距离计算 · 标量 / Vector API · Java 检索服务进程（Spring Boot）</title>
-          <rect x="980" y="560" width="180" height="60" rx="6" class="c-mask"/>
-          <rect x="980" y="560" width="180" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(986 566) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="1070" y="588" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">距离计算</text>
-        <text data-detail="context" x="1070" y="604" class="t-muted" font-size="9" text-anchor="middle">标量 / Vector API</text>
+          <text data-node-label="" data-detail-anchor="" x="560" y="548" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">检索编排</text>
+        <text data-detail="context" x="560" y="564" class="t-muted" font-size="9" text-anchor="middle">编排两路召回与融合</text>
         </g>
 
         <g id="node-modelService" data-node-id="modelService" data-node-label="FastAPI 模型服务" tabindex="0" role="button" aria-label="聚焦FastAPI 模型服务，独立 Python 进程, Python 模型服务进程" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="独立 Python 进程" data-node-tag=":8000" data-node-context="Python 模型服务进程">
           <title>FastAPI 模型服务 · 独立 Python 进程 · Python 模型服务进程 · :8000</title>
-          <rect x="475" y="80" width="170" height="60" rx="6" class="c-mask"/>
-          <rect x="475" y="80" width="170" height="60" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(481 86) scale(0.6875)">
+          <rect x="470" y="100" width="180" height="60" rx="6" class="c-mask"/>
+          <rect x="470" y="100" width="180" height="60" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(476 106) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="560" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI 模型服务</text>
-        <text data-detail="context" x="560" y="124" class="t-muted" font-size="9" text-anchor="middle">独立 Python 进程</text>
-        <text data-detail="fine" x="560" y="132" class="t-cloud" font-size="7" text-anchor="middle">:8000</text>
+          <text data-node-label="" data-detail-anchor="" x="560" y="128" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI 模型服务</text>
+        <text data-detail="context" x="560" y="144" class="t-muted" font-size="9" text-anchor="middle">独立 Python 进程</text>
+        <text data-detail="fine" x="560" y="152" class="t-cloud" font-size="7" text-anchor="middle">:8000</text>
         </g>
 
-        <g id="node-batcher" data-node-id="batcher" data-node-label="动态批处理" tabindex="0" role="button" aria-label="聚焦动态批处理，攒批后一次 forward, Python 模型服务进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="攒批后一次 forward" data-node-context="Python 模型服务进程">
-          <title>动态批处理 · 攒批后一次 forward · Python 模型服务进程</title>
-          <rect x="715" y="80" width="140" height="60" rx="6" class="c-mask"/>
-          <rect x="715" y="80" width="140" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(721 86) scale(0.6875)">
+        <g id="node-bge" data-node-id="bge" data-node-label="BGE-small-zh" tabindex="0" role="button" aria-label="聚焦BGE-small-zh，512 维 · 双塔, Python 模型服务进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="512 维 · 双塔" data-node-context="Python 模型服务进程">
+          <title>BGE-small-zh · 512 维 · 双塔 · Python 模型服务进程</title>
+          <rect x="720" y="100" width="170" height="60" rx="6" class="c-mask"/>
+          <rect x="720" y="100" width="170" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(726 106) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="785" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">动态批处理</text>
-        <text data-detail="context" x="785" y="124" class="t-muted" font-size="9" text-anchor="middle">攒批后一次 forward</text>
+          <text data-node-label="" data-detail-anchor="" x="805" y="128" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BGE-small-zh</text>
+        <text data-detail="context" x="805" y="144" class="t-muted" font-size="9" text-anchor="middle">512 维 · 双塔</text>
         </g>
 
-        <g id="node-bge" data-node-id="bge" data-node-label="BGE-small-zh" tabindex="0" role="button" aria-label="聚焦BGE-small-zh，512 维 · 已归一化, Python 模型服务进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="512 维 · 已归一化" data-node-context="Python 模型服务进程">
-          <title>BGE-small-zh · 512 维 · 已归一化 · Python 模型服务进程</title>
-          <rect x="945" y="80" width="160" height="60" rx="6" class="c-mask"/>
-          <rect x="945" y="80" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(951 86) scale(0.6875)">
+        <g id="node-reranker" data-node-id="reranker" data-node-label="BGE reranker" tabindex="0" role="button" aria-label="聚焦BGE reranker，单塔 · Cross-Encoder, Python 模型服务进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="单塔 · Cross-Encoder" data-node-context="Python 模型服务进程">
+          <title>BGE reranker · 单塔 · Cross-Encoder · Python 模型服务进程</title>
+          <rect x="720" y="220" width="170" height="60" rx="6" class="c-mask"/>
+          <rect x="720" y="220" width="170" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(726 226) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1025" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BGE-small-zh</text>
-        <text data-detail="context" x="1025" y="124" class="t-muted" font-size="9" text-anchor="middle">512 维 · 已归一化</text>
+          <text data-node-label="" data-detail-anchor="" x="805" y="248" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BGE reranker</text>
+        <text data-detail="context" x="805" y="264" class="t-muted" font-size="9" text-anchor="middle">单塔 · Cross-Encoder</text>
+        </g>
+
+        <g id="node-sparseIdx" data-node-id="sparseIdx" data-node-label="BM25 稀疏索引" tabindex="0" role="button" aria-label="聚焦BM25 稀疏索引，二元组分词 · 倒排表, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="二元组分词 · 倒排表" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>BM25 稀疏索引 · 二元组分词 · 倒排表 · Java 检索服务进程（Spring Boot）</title>
+          <rect x="740" y="400" width="180" height="70" rx="6" class="c-mask"/>
+          <rect x="740" y="400" width="180" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(746 406) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="830" y="433" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BM25 稀疏索引</text>
+        <text data-detail="context" x="830" y="449" class="t-muted" font-size="9" text-anchor="middle">二元组分词 · 倒排表</text>
+        </g>
+
+        <g id="node-denseIdx" data-node-id="denseIdx" data-node-label="HNSW 稠密索引" tabindex="0" role="button" aria-label="聚焦HNSW 稠密索引，自研 · 分层邻近图 · SIMD, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="自研 · 分层邻近图 · SIMD" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>HNSW 稠密索引 · 自研 · 分层邻近图 · SIMD · Java 检索服务进程（Spring Boot）</title>
+          <rect x="740" y="520" width="180" height="70" rx="6" class="c-mask"/>
+          <rect x="740" y="520" width="180" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(746 526) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="830" y="553" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">HNSW 稠密索引</text>
+        <text data-detail="context" x="830" y="569" class="t-muted" font-size="9" text-anchor="middle">自研 · 分层邻近图 · SIMD</text>
+        </g>
+
+        <g id="node-rrf" data-node-id="rrf" data-node-label="RRF 融合" tabindex="0" role="button" aria-label="聚焦RRF 融合，只看排名不看分数, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="只看排名不看分数" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>RRF 融合 · 只看排名不看分数 · Java 检索服务进程（Spring Boot）</title>
+          <rect x="1010" y="465" width="150" height="60" rx="6" class="c-mask"/>
+          <rect x="1010" y="465" width="150" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1016 471) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="1085" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">RRF 融合</text>
+        <text data-detail="context" x="1085" y="509" class="t-muted" font-size="9" text-anchor="middle">只看排名不看分数</text>
+        </g>
+
+        <g id="node-rerank" data-node-id="rerank" data-node-label="精排编排" tabindex="0" role="button" aria-label="聚焦精排编排，applyRerank, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="applyRerank" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>精排编排 · applyRerank · Java 检索服务进程（Spring Boot）</title>
+          <rect x="1210" y="465" width="160" height="60" rx="6" class="c-mask"/>
+          <rect x="1210" y="465" width="160" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1216 471) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="1290" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">精排编排</text>
+        <text data-detail="context" x="1290" y="509" class="t-muted" font-size="9" text-anchor="middle">applyRerank</text>
+        </g>
+
+        <g id="node-docStore" data-node-id="docStore" data-node-label="文档原文" tabindex="0" role="button" aria-label="聚焦文档原文，documents.jsonl, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="database" data-node-sublabel="documents.jsonl" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>文档原文 · documents.jsonl · Java 检索服务进程（Spring Boot）</title>
+          <rect x="470" y="680" width="180" height="60" rx="6" class="c-mask"/>
+          <rect x="470" y="680" width="180" height="60" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(476 686) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="560" y="708" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">文档原文</text>
+        <text data-detail="context" x="560" y="724" class="t-muted" font-size="9" text-anchor="middle">documents.jsonl</text>
+        </g>
+
+        <g id="node-snapshot" data-node-id="snapshot" data-node-label="索引快照" tabindex="0" role="button" aria-label="聚焦索引快照，vector-index.snapshot, Java 检索服务进程（Spring Boot）" aria-pressed="false" data-node-kind="database" data-node-sublabel="vector-index.snapshot" data-node-context="Java 检索服务进程（Spring Boot）">
+          <title>索引快照 · vector-index.snapshot · Java 检索服务进程（Spring Boot）</title>
+          <rect x="740" y="720" width="180" height="60" rx="6" class="c-mask"/>
+          <rect x="740" y="720" width="180" height="60" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(746 726) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="830" y="748" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">索引快照</text>
+        <text data-detail="context" x="830" y="764" class="t-muted" font-size="9" text-anchor="middle">vector-index.snapshot</text>
         </g>
 
         <!-- Connection labels -->
         <g data-detail="context" data-edge-from="client" data-edge-to="api" data-edge-label="HTTP JSON" data-edge-key="0" data-edge-id="client-to-api">
-          <rect x="168.4" y="430" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="195" y="440" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP JSON</text>
+          <rect x="163.4" y="530" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
+          <text x="190" y="540" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP JSON</text>
         </g>
         <g data-detail="context" data-edge-from="api" data-edge-to="service" data-edge-label="参数校验" data-edge-key="1" data-edge-id="api-to-service">
-          <rect x="410.8" y="430" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="435" y="440" class="t-edge-default" font-size="8" text-anchor="middle">参数校验</text>
+          <rect x="405.8" y="530" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="430" y="540" class="t-edge-default" font-size="8" text-anchor="middle">参数校验</text>
         </g>
-        <g data-detail="context" data-edge-from="service" data-edge-to="modelClient" data-edge-label="编码" data-edge-key="2" data-edge-id="service-to-modelclient">
-          <rect x="545" y="400" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="560" y="410" class="t-edge-default" font-size="8" text-anchor="middle">编码</text>
+        <g data-detail="context" data-edge-from="service" data-edge-to="modelService" data-edge-label="HTTP /embed /rerank" data-edge-key="2" data-edge-id="service-to-model">
+          <rect x="459" y="197" width="101.2" height="14" rx="3" class="c-mask"/>
+          <text x="509.6" y="207" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP /embed /rerank</text>
         </g>
-        <g data-detail="context" data-edge-from="modelClient" data-edge-to="modelService" data-edge-label="HTTP 批量 /embed" data-edge-key="3" data-edge-id="modelclient-to-modelservice">
-          <rect x="516.6" y="240" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="560" y="250" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP 批量 /embed</text>
+        <g data-detail="context" data-edge-from="modelService" data-edge-to="bge" data-edge-label="批量编码" data-edge-key="3" data-edge-id="model-to-bge">
+          <rect x="660.8" y="110" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="685" y="120" class="t-edge-default" font-size="8" text-anchor="middle">批量编码</text>
         </g>
-        <g data-detail="context" data-edge-from="service" data-edge-to="indexMgr" data-edge-label="检索" data-edge-key="4" data-edge-id="service-to-indexmgr">
-          <rect x="670" y="430" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="685" y="440" class="t-edge-default" font-size="8" text-anchor="middle">检索</text>
+        <g data-detail="context" data-edge-from="modelService" data-edge-to="reranker" data-edge-label="精排打分" data-edge-key="4" data-edge-id="model-to-reranker">
+          <rect x="607.8249999999999" y="164" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="632.025" y="174" class="t-edge-default" font-size="8" text-anchor="middle">精排打分</text>
         </g>
-        <g data-detail="context" data-edge-from="indexMgr" data-edge-to="hnsw" data-edge-label="委托" data-edge-key="5" data-edge-id="indexmgr-to-hnsw">
-          <rect x="920" y="430" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="935" y="440" class="t-edge-default" font-size="8" text-anchor="middle">委托</text>
+        <g data-detail="context" data-edge-from="service" data-edge-to="denseIdx" data-edge-label="稠密召回" data-edge-key="5" data-edge-id="service-to-dense">
+          <rect x="670.8" y="537" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="695" y="547" class="t-edge-default" font-size="8" text-anchor="middle">稠密召回</text>
         </g>
-        <g data-detail="context" data-edge-from="service" data-edge-to="docStore" data-edge-label="回填原文" data-edge-key="6" data-edge-id="service-to-docstore">
-          <rect x="505.59999999999997" y="513" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="529.8" y="523" class="t-edge-default" font-size="8" text-anchor="middle">回填原文</text>
+        <g data-detail="context" data-edge-from="service" data-edge-to="sparseIdx" data-edge-label="稀疏召回" data-edge-key="6" data-edge-id="service-to-sparse">
+          <rect x="606.275" y="476" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="630.475" y="486" class="t-edge-default" font-size="8" text-anchor="middle">稀疏召回</text>
         </g>
-        <g data-detail="context" data-edge-from="indexMgr" data-edge-to="bruteForce" data-edge-label="对照组" data-edge-key="7" data-edge-id="indexmgr-to-bruteforce">
-          <rect x="765.2" y="513" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="784.6" y="523" class="t-edge-dashed" font-size="8" text-anchor="middle">对照组</text>
+        <g data-detail="context" data-edge-from="denseIdx" data-edge-to="rrf" data-edge-label="稠密候选" data-edge-key="7" data-edge-id="dense-to-rrf">
+          <rect x="940.8" y="508.5" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="965" y="518.5" class="t-edge-default" font-size="8" text-anchor="middle">稠密候选</text>
         </g>
-        <g data-detail="context" data-edge-from="hnsw" data-edge-to="distance" data-edge-label="SIMD 内积" data-edge-key="8" data-edge-id="hnsw-to-distance">
-          <rect x="1010.8000000000001" y="513" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="1037.4" y="523" class="t-edge-default" font-size="8" text-anchor="middle">SIMD 内积</text>
+        <g data-detail="context" data-edge-from="sparseIdx" data-edge-to="rrf" data-edge-label="稀疏候选" data-edge-key="8" data-edge-id="sparse-to-rrf">
+          <rect x="940.8" y="441.5" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="965" y="451.5" class="t-edge-default" font-size="8" text-anchor="middle">稀疏候选</text>
         </g>
-        <g data-detail="context" data-edge-from="modelService" data-edge-to="batcher" data-edge-label="入队" data-edge-key="9" data-edge-id="modelservice-to-batcher">
-          <rect x="665" y="90" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="680" y="100" class="t-edge-default" font-size="8" text-anchor="middle">入队</text>
+        <g data-detail="context" data-edge-from="rrf" data-edge-to="rerank" data-edge-label="重排序" data-edge-key="9" data-edge-id="rrf-to-rerank">
+          <rect x="1165.6" y="475" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="1185" y="485" class="t-edge-default" font-size="8" text-anchor="middle">重排序</text>
         </g>
-        <g data-detail="context" data-edge-from="batcher" data-edge-to="bge" data-edge-label="批量编码" data-edge-key="10" data-edge-id="batcher-to-bge">
-          <rect x="875.8" y="90" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="900" y="100" class="t-edge-default" font-size="8" text-anchor="middle">批量编码</text>
+        <g data-detail="context" data-edge-from="service" data-edge-to="docStore" data-edge-label="回填原文" data-edge-key="10" data-edge-id="service-to-docstore">
+          <rect x="505.59999999999997" y="623" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="529.8" y="633" class="t-edge-default" font-size="8" text-anchor="middle">回填原文</text>
+        </g>
+        <g data-detail="context" data-edge-from="denseIdx" data-edge-to="snapshot" data-edge-label="落盘 / 恢复" data-edge-key="11" data-edge-id="dense-to-snapshot">
+          <rect x="761.2" y="648" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="792.6" y="658" class="t-edge-default" font-size="8" text-anchor="middle">落盘 / 恢复</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
         <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Python 模型服务进程">
-          <rect data-graph-role="structural-frame-label-mask" x="439" y="60" width="112.6" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="443" y="73" class="t-cloud" font-size="9" font-weight="600">Python 模型服务进程</text>
+          <rect data-graph-role="structural-frame-label-mask" x="434" y="79" width="116.64517269032257" height="17" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="438" y="92.35483970967742" class="t-cloud" font-size="9.35483970967742" font-weight="600">Python 模型服务进程</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Java 检索服务进程（Spring Boot）">
-          <rect data-graph-role="structural-frame-label-mask" x="204" y="240" width="182.79999999999998" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="208" y="253" class="t-cloud" font-size="9" font-weight="600">Java 检索服务进程（Spring Boot）</text>
+          <rect data-graph-role="structural-frame-label-mask" x="194" y="379" width="189.61292242580643" height="17" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="198" y="392.35483970967744" class="t-cloud" font-size="9.35483970967742" font-weight="600">Java 检索服务进程（Spring Boot）</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="672" class="t-primary" font-size="12" font-weight="650">图例</text>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="后端" data-legend-x="40" data-legend-baseline="692" data-legend-width="63">
-            <rect x="40" y="683" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="62" y="692" class="t-muted" font-size="10" font-weight="500">后端</text>
+          <text x="40" y="832" class="t-primary" font-size="12" font-weight="650">图例</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="后端" data-legend-x="40" data-legend-baseline="852" data-legend-width="63">
+            <rect x="40" y="843" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="62" y="852" class="t-muted" font-size="10" font-weight="500">后端</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="数据库" data-legend-x="125" data-legend-baseline="692" data-legend-width="73">
-            <rect x="125" y="683" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="147" y="692" class="t-muted" font-size="10" font-weight="500">数据库</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="数据库" data-legend-x="125" data-legend-baseline="852" data-legend-width="73">
+            <rect x="125" y="843" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="147" y="852" class="t-muted" font-size="10" font-weight="500">数据库</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="云服务" data-legend-x="220" data-legend-baseline="692" data-legend-width="73">
-            <rect x="220" y="683" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="242" y="692" class="t-muted" font-size="10" font-weight="500">云服务</text>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="云服务" data-legend-x="220" data-legend-baseline="852" data-legend-width="73">
+            <rect x="220" y="843" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="242" y="852" class="t-muted" font-size="10" font-weight="500">云服务</text>
           </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系统" data-legend-x="315" data-legend-baseline="692" data-legend-width="83">
-            <rect x="315" y="683" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="337" y="692" class="t-muted" font-size="10" font-weight="500">外部系统</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系统" data-legend-x="315" data-legend-baseline="852" data-legend-width="83">
+            <rect x="315" y="843" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="337" y="852" class="t-muted" font-size="10" font-weight="500">外部系统</text>
           </g>
         </g>
       </svg>
@@ -5455,46 +5464,49 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>一次检索的路径</h3>
+          <h3>一次检索走的路</h3>
         </div>
         <ul>
-          <li>客户端 → REST 接口 → 检索编排 → 索引 → 回填原文</li>
-          <li>响应携带分阶段耗时（编码 / 检索），避免优化方向选错</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot amber"></div>
-          <h3>跨进程边界：本项目的性能关键</h3>
-        </div>
-        <ul>
-          <li>Java 与 Python 是两个独立进程，每次调用都是一次网络往返</li>
-          <li>/embed 从设计上就是批量接口，把 N 次往返压成 1 次</li>
-          <li>实测编码 25 到 38 ms，而索引检索不到 1 ms —— 瓶颈在这里</li>
+          <li>客户端 → REST 接口 → 检索编排，然后同时走两条召回</li>
+          <li>两条召回的结果由 RRF 融合，再交给精排重新排序</li>
+          <li>响应携带分阶段耗时（编码 / 检索 / 融合），避免优化方向选错</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>索引核心</h3>
+          <h3>两条召回路线为什么都要</h3>
         </div>
         <ul>
-          <li>HNSW 从零实现：分层邻近图 / 贪心下降 / 启发式邻居选择</li>
-          <li>暴力检索既是正确性基准，也是所有性能数字的对照组</li>
-          <li>距离计算保留标量与 SIMD 双实现，收益可量化（4.97 倍）</li>
+          <li>稠密擅长语义泛化：「内存回收」能匹配到「垃圾回收」</li>
+          <li>稀疏擅长精确词：efSearch、HNSW 这类标识符只有它能精确命中</li>
+          <li>实测：词面查询 BM25 0.96 而向量 0.80；语义查询反转为 0.63 对 0.88</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>精排为什么值得多花几百毫秒</h3>
+        </div>
+        <ul>
+          <li>向量检索是双塔：查询与文档各自独立编码，编码时两者没见过彼此</li>
+          <li>cross-encoder 把两者拼在一起送进模型，能做完整的注意力交互</li>
+          <li>实测 MRR 提升 9% 至 14%，而召回率完全不变</li>
+          <li>默认关闭：质量与延迟的权衡应由业务决定，不该由框架替用户决定</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot slate"></div>
-          <h3>尚未接入的部分（避免误读）</h3>
+          <h3>持久化解决的不是「省事」</h3>
         </div>
         <ul>
-          <li>BM25 + RRF 混合召回、Cross-Encoder 精排：已实现，未接入检索链路</li>
-          <li>堆外内存 / StampedLock 乐观读 / 索引持久化：计划中</li>
+          <li>10 万条数据重建 HNSW 图要 113 秒，这是每次冷启动都要付的成本</li>
+          <li>二进制快照恢复只要 173 毫秒，加速 654 倍</li>
+          <li>BM25 不需要快照：从 documents.jsonl 重建即可，比建图便宜几个数量级</li>
         </ul>
       </div>
     </div>

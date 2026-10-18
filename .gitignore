@@ -35,6 +35,12 @@ data/eval/
 # 提交副本只会让仓库多一份会过期的复制品。
 data/corpus-full/
 
+# Archify 的绘图工作目录：候选 JSON、多轮门禁回执、截图。
+# 这些是生成过程的中间证据；正式产物已同步到
+# docs/architecture.html / .png / .source.json。
+# 需要重建时拿 docs/architecture.source.json 跑一遍即可。
+.archify/
+
 # 评测产物
 # 注意：基线与并发数据要保留 —— 它们是 bench/REPORT.md 里表格的原始来源，
 # 提交它们才能让报告可复现（报告是脚本生成的，但数据得有）。
