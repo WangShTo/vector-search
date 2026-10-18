@@ -76,7 +76,22 @@ public class SearchController {
                 documentStore.count(),
                 documentStore.totalCharacters(),
                 hnswStats,
+                indexManager.restoredInMillis(),
                 modelServiceClient.isHealthy());
+    }
+
+    /**
+     * 把当前索引与原文一起落盘。
+     *
+     * <p>落盘之后重启服务会直接从快照恢复 —— 10 万条数据建图要两分钟，
+     * 而读快照不到一秒。这是一个「灌一次、长期用」的操作。
+     *
+     * <p>需要重新灌数据时，删掉 {@code data/index/} 下的两个文件即可。
+     */
+    @PostMapping("/admin/snapshot")
+    public VectorIndexManager.SnapshotResult snapshot() {
+        log.info("收到索引落盘请求");
+        return indexManager.snapshot();
     }
 
     /**

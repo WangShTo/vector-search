@@ -22,6 +22,7 @@ public record StatsResponse(
         int storedDocuments,
         long characterCount,
         HnswStats hnsw,
+        Long restoredInMillis,
         boolean modelServiceHealthy
 ) {
 

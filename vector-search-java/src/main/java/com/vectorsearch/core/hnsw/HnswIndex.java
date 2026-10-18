@@ -5,6 +5,8 @@ import com.vectorsearch.core.DistanceMetricsSimd;
 import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.VectorIndex;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -624,6 +626,84 @@ public class HnswIndex implements VectorIndex {
             throw new IllegalArgumentException(
                     "向量维度不匹配: 期望 " + dimension + "，实际 " + vector.length);
         }
+    }
+
+    // =====================================================================
+    // 持久化
+    // =====================================================================
+
+    /**
+     * 把索引写成快照文件。
+     *
+     * <p>只写<b>已用的部分</b>：容量是按 2 的幂增长的（10 万节点时实际容量 131072），
+     * 按容量写会多存 31% 的空白字节。截断到 {@code nodeCount} 之后，
+     * 文件大小正好等于数据本身，加载后需要扩容再重新增长即可。
+     *
+     * <p>持读锁期间做拷贝：写盘可能耗时几百毫秒，不能让写线程等这么久；
+     * 而快照本身必须是某个一致的时间点，所以拷贝在锁内、落盘在锁外。
+     */
+    public void writeTo(Path path) throws IOException {
+        HnswSnapshot.Data snapshot;
+        lock.readLock().lock();
+        try {
+            int maxLinks0 = params.mMax0();
+            snapshot = new HnswSnapshot.Data(
+                    dimension,
+                    params.m(),
+                    params.efConstruction(),
+                    params.levelMultiplier(),
+                    nodeCount,
+                    entryPoint,
+                    maxLevel,
+                    upperStoreSize,
+                    Arrays.copyOf(vectorStore, nodeCount * dimension),
+                    Arrays.copyOf(externalIdStore, nodeCount),
+                    Arrays.copyOf(levelStore, nodeCount),
+                    Arrays.copyOf(layer0Links, nodeCount * maxLinks0),
+                    Arrays.copyOf(layer0Count, nodeCount),
+                    Arrays.copyOf(upperStore, upperStoreSize),
+                    Arrays.copyOf(upperOffset, nodeCount));
+        } finally {
+            lock.readLock().unlock();
+        }
+        // 落盘放在锁外：拷贝完成时快照已经是一致的时间点了
+        HnswSnapshot.write(path, snapshot);
+    }
+
+    /**
+     * 从快照文件恢复索引。
+     *
+     * <p>参数（m / efConstruction / dimension）都来自文件本身，而不是当前配置 ——
+     * 这样即使配置改了，也能把老索引原样读回来，再由调用方决定是否接受。
+     * 是否匹配由调用方校验（{@code VectorIndexManager} 会比对配置里的维度）。
+     */
+    public static HnswIndex readFrom(Path path) throws IOException {
+        HnswSnapshot.Data data = HnswSnapshot.read(path);
+        HnswParams params = new HnswParams(data.m(), data.efConstruction(), data.levelMultiplier());
+        HnswIndex index = new HnswIndex(data.dimension(), params, 42L);
+        index.restore(data);
+        return index;
+    }
+
+    /** 把读回的数据装进各字段。容量按节点数精确分配，不带空余。 */
+    private void restore(HnswSnapshot.Data data) {
+        int capacityNeeded = Math.max(data.nodeCount(), INITIAL_CAPACITY);
+        allocate(capacityNeeded);
+        ensureUpperStore(Math.max(data.upperStoreSize(), INITIAL_UPPER_STORE));
+
+        System.arraycopy(data.vectorStore(), 0, vectorStore, 0, data.nodeCount() * dimension);
+        System.arraycopy(data.externalIdStore(), 0, externalIdStore, 0, data.nodeCount());
+        System.arraycopy(data.levelStore(), 0, levelStore, 0, data.nodeCount());
+        System.arraycopy(data.layer0Links(), 0, layer0Links, 0,
+                data.nodeCount() * params.mMax0());
+        System.arraycopy(data.layer0Count(), 0, layer0Count, 0, data.nodeCount());
+        System.arraycopy(data.upperStore(), 0, upperStore, 0, data.upperStoreSize());
+        System.arraycopy(data.upperOffset(), 0, upperOffset, 0, data.nodeCount());
+
+        this.upperStoreSize = data.upperStoreSize();
+        this.nodeCount = data.nodeCount();
+        this.entryPoint = data.entryPoint();
+        this.maxLevel = data.maxLevel();
     }
 
     // =====================================================================

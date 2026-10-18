@@ -20,9 +20,16 @@ models/
 *.safetensors
 
 # 索引数据
-data/index/
+# 注意用 **/ 前缀：data-dir 是相对「服务进程工作目录」解析的，
+# 从 vector-search-java/ 启动时索引会落在 vector-search-java/data/index/。
+# 只写 data/index/ 的话只匹配项目根目录，嵌套的那份会被误提交。
+**/data/index/
 data/*.bin
 data/*.idx
+
+# 评测集是 build_dataset.py 的产物，不入库：
+# 语料一变它就失效了，提交进去只会变成过期的假数据。
+data/eval/
 
 # 评测产物
 # 注意：基线与并发数据要保留 —— 它们是 bench/REPORT.md 里表格的原始来源，
