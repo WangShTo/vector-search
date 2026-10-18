@@ -29,7 +29,7 @@ public record VectorSearchProperties(
             modelTimeoutMs = 5000;
         }
         if (index == null) {
-            index = new Index(512, 16, 200, 100, "./data/index");
+            index = new Index(512, 16, 200, 100, "./data/index", 300, 50);
         }
         if (search == null) {
             search = new Search("hybrid", 50, 60, false, 20);
@@ -82,13 +82,17 @@ public record VectorSearchProperties(
      * @param efConstruction   HNSW 建图候选池大小
      * @param efSearch         查询候选池大小，recall / 延迟 的主旋钮
      * @param dataDir          索引落盘目录
+     * @param chunkSize        上传文档切块的目标字符数
+     * @param chunkOverlap     超长段落硬切时的重叠字符数
      */
     public record Index(
             int dimension,
             int m,
             int efConstruction,
             int efSearch,
-            String dataDir
+            String dataDir,
+            int chunkSize,
+            int chunkOverlap
     ) {
         public Index {
             if (dimension <= 0) {
@@ -105,6 +109,12 @@ public record VectorSearchProperties(
             }
             if (dataDir == null || dataDir.isBlank()) {
                 dataDir = "./data/index";
+            }
+            if (chunkSize < 64) {
+                chunkSize = 300;
+            }
+            if (chunkOverlap < 0 || chunkOverlap >= chunkSize) {
+                chunkOverlap = Math.min(50, chunkSize / 4);
             }
         }
 

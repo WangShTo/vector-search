@@ -106,7 +106,21 @@ public class SearchService {
         long searchStart = needDense ? embeddingEndsAt : start;
 
         // 第一阶段：召回 + 融合
-        List<SearchResult> results = fuse(mode, denseHits, sparseHits, topK);
+        //
+        // 这里故意按 pool（而不是 topK）来截断：被逻辑删除的文档仍然留在索引里，
+        // 检索时要把它们过滤掉。如果一开始就只留 topK 条，删掉几篇之后
+        // 结果就会不足 topK —— 先多留一些、过滤完再截断才对。
+        List<SearchResult> candidates = fuse(mode, denseHits, sparseHits, Math.max(topK, pool));
+        List<SearchResult> results = new ArrayList<>(candidates.size());
+        for (SearchResult candidate : candidates) {
+            if (documentStore.isDeleted(candidate.id())) {
+                continue;
+            }
+            results.add(candidate);
+            if (results.size() >= topK) {
+                break;
+            }
+        }
 
         // 第二阶段：精排
         boolean reranked = false;

@@ -374,10 +374,13 @@ SIMD 从整块大数组按偏移加载反而比追引用更友好。
 - [ ] 灌数据后 `POST /api/admin/snapshot`，重启能秒级恢复
 - [ ] 三种检索模式（vector / bm25 / hybrid）都能返回结果
 - [ ] 精排开启后 `reranked=true` 且结果顺序发生合理变化
-- [ ] 打开 `http://localhost:8080/` 能检索，三路对比与阶段耗时条正常
+- [ ] 打开 `http://localhost:8080/`，三个页面都能用（检索 / 知识库 / 索引运维）
+- [ ] **完整闭环**：上传一个 `.md`，能在知识库看到 → 搜得到 → 删除后立刻搜不到
+- [ ] 知识库页的「逻辑删除」计数在删除后 +1，运维页有相应提示
 - [ ] README 里的架构图是最新的
 - [ ] 仓库有渐进式的 commit 历史（不是一次性全部导入）
-- [ ] 没有提交 `target/`、`.venv/`、`logs/`、`data/index/`、`data/eval/`、`data/corpus-full/`
+- [ ] 没有提交 `target/`、`.venv/`、`logs/`、`data/index/`、`data/eval/`、
+      `data/corpus-full/`、`data/corpus-demo/`、`data/eval-demo/`
 
 ---
 

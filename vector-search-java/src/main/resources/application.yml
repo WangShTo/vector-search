@@ -6,6 +6,11 @@ spring:
     name: vector-search-java
   jackson:
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      # 上传知识库文档用。默认只有 1MB，一篇长文档就超了
+      max-file-size: 20MB
+      max-request-size: 20MB
 
 vector-search:
   # Python 模型服务地址（docker compose 里由环境变量覆盖）
@@ -36,6 +41,13 @@ vector-search:
     # vector-search.index.data-dir（relaxed binding 不做跨段的下划线转换），
     # 写成 ${...} 才会被 Spring 做占位符替换。容器里靠它指向挂载的 volume。
     data-dir: ${VECTOR_SEARCH_DATA_DIR:./data/index}
+
+    # 上传文档的切块参数。
+    # 块太大语义会被摊平（一篇 5000 字压成一个向量，既不像开头也不像中间），
+    # 块太小则丢上下文。300 字左右是个常见起点。
+    chunk-size: 300
+    # 超长段落硬切时的重叠字符数，避免答案跨在块边界上时两边都不完整
+    chunk-overlap: 50
 
   search:
     # 请求不指定 mode 时用哪个：vector / bm25 / hybrid

@@ -85,7 +85,8 @@ public class SearchController {
                         sparseIndexManager.termCount(),
                         Math.round(sparseIndexManager.averageDocumentLength() * 10) / 10.0),
                 indexManager.restoredInMillis(),
-                modelServiceClient.isHealthy());
+                modelServiceClient.isHealthy(),
+                documentStore.deletedCount());
     }
 
     /**

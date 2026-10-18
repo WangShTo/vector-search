@@ -24,7 +24,9 @@ public record StatsResponse(
         HnswStats hnsw,
         SparseStats sparse,
         Long restoredInMillis,
-        boolean modelServiceHealthy
+        Boolean modelServiceHealthy,
+        /** 逻辑删除的文档数。要真正回收这些空间必须重建索引。 */
+        int tombstones
 ) {
 
     /**
