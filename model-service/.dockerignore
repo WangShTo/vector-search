@@ -1,0 +1,13 @@
+# 本地虚拟环境：约 1 GB，绝不能进构建上下文（否则每次 build 都要上传一分钟）
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 测试不需要进镜像（Dockerfile 只拷 app/）
+tests/
+
+.git/
+.gitignore

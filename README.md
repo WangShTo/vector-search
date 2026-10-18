@@ -138,6 +138,15 @@ mvn spring-boot:run
 docker compose up --build
 ```
 
+> **验证状态：静态审查通过，尚未实跑。** 开发机没有安装 Docker，所以这条路径只做到了
+> 「补齐缺失文件 + 语法校验 + 逐个核对引用的路径」这一步，**没有真正构建并启动过**。
+> 已知需要实际验证的点：镜像 tag 是否可用（本机连不上 Docker Hub，无法在线核实）、
+> 首次启动的模型下载是否能在 healthcheck 的 `start_period` 内完成。
+>
+> 如果有环境，第一次跑的时候建议按这个顺序确认：
+> `docker compose config`（语法）→ `docker compose build`（构建）→
+> `docker compose up` → `curl localhost:8080/api/stats`。
+
 ### ⚠️ 两个国内环境的坑
 
 这两个问题都会表现为**静默挂起**，而不是明确的报错，所以单独写出来：
@@ -161,6 +170,19 @@ Invoke-WebRequest 'https://aka.ms/download-jdk/microsoft-jdk-21-windows-x64.zip'
 ## 演示页面
 
 服务起来后直接打开 **<http://localhost:8080/>** —— 页面由 Spring Boot 的静态资源目录托管，没有构建步骤，也没有前端框架。
+
+> **演示语料与评测语料是两份，别搞混。**
+>
+> 演示默认灌的是 `data/corpus-demo/`（121 块纯散文，来自项目文档，已剥离代码块与表格）——
+> 因为它要看起来像「知识库问答」。**第一版演示直接拿源码当语料，搜出来全是
+> `able>`、`*.` 这种碎片，看起来像系统坏了**，问题出在语料而不是检索。
+>
+> 而 `bench/REPORT.md` 里的评测数字来自另一份更大的混合语料
+> （`data/corpus-full/`，602 块，含源码与文档）—— 评测**需要** `efSearch`、`HnswIndex`
+> 这类标识符作为精确匹配目标，剥掉反而失真。
+>
+> 语料选择取决于用途。**"看起来好"的语料和"测得准"的语料不是同一份**，
+> 这是做检索系统很实际的一个认知。
 
 ### 单模式检索
 
@@ -502,14 +524,12 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] **BM25 稀疏检索 + RRF 混合召回**（三种模式：vector / bm25 / hybrid）
 - [x] 混合检索评测（词面 vs 语义两套查询交叉验证）
 - [x] **二阶段精排**（cross-encoder，MRR +9~14%，延迟 43ms → 599ms）
+- [x] 演示页面（原生 HTML/CSS/JS，单文件无构建；含三路对比与阶段耗时条）
 - [ ] 完全堆外内存（受 Java 21 预览特性限制，留待 JDK 22+，理由见设计取舍 8）
-- [ ] BM25 + RRF 混合召回 + rerank 接入检索链路
 - [ ] 索引热更新（离线构建新索引，原子替换引用，零停机）
 - [ ] `StampedLock` 乐观读（前置条件「读路径无共享写入」已完成）
 - [ ] 在独占机器上取得可信的并发基准（当前机器噪声过大，见报告第四节）
-- [ ] Docker 镜像验证 + CI
-- [x] 演示页面（原生 HTML/CSS/JS，单文件无构建；含三路对比与阶段耗时条）
-- [ ] Docker 镜像验证 + CI
+- [ ] Docker 镜像实跑验证（文件已补齐并静态审查，但开发机没有 Docker）+ CI
 
 ---
 

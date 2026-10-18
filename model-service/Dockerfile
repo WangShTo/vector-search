@@ -4,11 +4,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 先装依赖再拷代码：只要 requirements.txt 没变，改代码就不会触发重装，
-# 镜像重建从几分钟降到几秒
-COPY requirements.txt .
+# torch 单独装，而且走 CPU 专用索引。
+# 直接从 PyPI 装 torch 会拖下来 2 GB+ 的 CUDA 运行库 —— 这个镜像只跑 CPU，
+# 那些库一个都用不上，镜像体积会从约 2 GB 涨到 7 GB 以上。
+# 这一步放在 requirements 之前，是为了让它自己占一层、能被缓存。
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
+
+# 先装依赖再拷代码：只要 requirements.txt 没变，改代码就不会触发重装，
+# 镜像重建从几分钟降到几秒。
+# requirements.txt 里的 torch 是下限约束（>=2.4），上面已经装好 CPU 版，
+# pip 会认为已满足而跳过 —— 不会把它偷偷换成 CUDA 版。
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 

@@ -1,10 +1,12 @@
-version: "3.8"
-
 # 一键启动：Java 检索服务 + Python 模型服务
 #   docker compose up --build
 #
-# 首次启动 Python 服务会下载 BGE 模型（约 400MB），耐心等待。
-# 模型缓存在 named volume 里，重建容器不会重新下载。
+# 首次构建会下载 Python 依赖（CPU 版 torch 约 200 MB）与 BGE 模型（约 400 MB），
+# 依赖和模型都缓存在 named volume / 镜像层里，之后重建很快。
+#
+# ⚠️ 验证状态：本文件**尚未在真实 Docker 环境中跑通** —— 开发机没有安装 Docker。
+#    已做的是静态审查（补齐缺失的 Dockerfile、修正构建上下文、修正 torch 安装源）。
+#    第一次实际运行的人请把结果反馈回来；在那之前不要把它当成"已验证可部署"。
 
 services:
   model-service:
@@ -14,9 +16,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      # 模型缓存。不挂的话每次重建容器都要重新下载 400 MB
       - hf-cache:/root/.cache/huggingface
     environment:
-      # 默认用 CPU；有 NVIDIA 显卡且装了 nvidia-container-toolkit 时改成 cuda
+      # 默认用 CPU；有 NVIDIA 显卡且装了 nvidia-container-toolkit 时改成 cuda，
+      # 同时要在下面加 runtime: nvidia
       - EMBEDDING_DEVICE=cpu
       - EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
       - RERANKER_MODEL=BAAI/bge-reranker-base
@@ -30,7 +34,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+      # 首次启动要下载模型，留足时间；之后启动是秒级
       start_period: 120s
+    restart: unless-stopped
 
   vector-search-java:
     build:
@@ -40,10 +46,17 @@ services:
       - "8080:8080"
     environment:
       - MODEL_SERVICE_URL=http://model-service:8000
-      - JAVA_TOOL_OPTIONS=--add-modules jdk.incubator.vector
+      # 镜像里已经设了同样的值，这里显式写出来是为了让"索引存在哪"一眼可见
+      - VECTOR_SEARCH_DATA_DIR=/app/data/index
+    volumes:
+      # 索引快照与原文。不挂的话每次重建容器索引都会丢，
+      # 持久化（重启 113 秒 → 173 毫秒）就白做了
+      - index-data:/app/data/index
     depends_on:
       model-service:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   hf-cache:
+  index-data:

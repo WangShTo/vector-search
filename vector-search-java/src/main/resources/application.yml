@@ -31,7 +31,11 @@ vector-search:
     # 注意：相对路径是相对「服务进程的工作目录」解析的，不是项目根目录。
     # 从 vector-search-java/ 启动时实际落在 vector-search-java/data/index/，
     # 启动日志会把解析后的绝对路径打出来，不用猜。
-    data-dir: ./data/index
+    #
+    # 必须写成显式占位符：环境变量 VECTOR_SEARCH_DATA_DIR 不会自动映射到
+    # vector-search.index.data-dir（relaxed binding 不做跨段的下划线转换），
+    # 写成 ${...} 才会被 Spring 做占位符替换。容器里靠它指向挂载的 volume。
+    data-dir: ${VECTOR_SEARCH_DATA_DIR:./data/index}
 
   search:
     # 请求不指定 mode 时用哪个：vector / bm25 / hybrid

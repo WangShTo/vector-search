@@ -35,6 +35,10 @@ data/eval/
 # 提交副本只会让仓库多一份会过期的复制品。
 data/corpus-full/
 
+# 演示语料同理，由同一个脚本一起生成（只要文档、不要源码）
+data/corpus-demo/
+data/eval-demo/
+
 # Archify 的绘图工作目录：候选 JSON、多轮门禁回执、截图。
 # 这些是生成过程的中间证据；正式产物已同步到
 # docs/architecture.html / .png / .source.json。

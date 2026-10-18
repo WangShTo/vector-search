@@ -130,7 +130,44 @@ def make_query(chunk: str, target_length: int, rng: random.Random) -> str | None
 
 # ----------------------------------------------------------------------
 
-def read_corpus(corpus_dir: Path) -> list[dict]:
+# ----------------------------------------------------------------------
+# 剥离不适合做演示语料的内容
+# ----------------------------------------------------------------------
+
+FENCED_CODE = re.compile(r"```.*?```", re.S)
+TABLE_ROW = re.compile(r"^[ \t]*\|.*$", re.M)
+RULE = re.compile(r"^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$", re.M)
+QUOTE = re.compile(r"^[ \t]*>[ \t]?", re.M)
+INLINE_CODE = re.compile(r"`([^`\n]{1,120})`")
+HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.M)
+# 粗体可能跨行，所以 . 要能吃换行（re.S）
+BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
+LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+
+
+def strip_non_prose(text: str) -> str:
+    """去掉代码块、表格行与 Markdown 标记，只留下可读的散文。
+
+    **为什么需要这一步**：项目的文档里混着大量代码与表格，直接切块会得到
+    「able>」「*.」「| 字段 | 说明 |」这种碎片。拿它当演示语料，
+    检索结果看起来就像系统坏了 —— 但问题在语料，不在检索。
+
+    **注意这只用于演示语料**，不要用于评测语料：评测时标识符本身是有意义的
+    检索目标（BM25 的优势正是精确匹配 `efSearch` 这类词），剥掉反而失真。
+    """
+    text = FENCED_CODE.sub("\n", text)
+    text = TABLE_ROW.sub("", text)
+    text = RULE.sub("", text)
+    text = QUOTE.sub("", text)
+    text = INLINE_CODE.sub(r"\1", text)   # 保留行内 code 的文字，去掉反引号
+    text = LINK.sub(r"\1", text)
+    text = HEADING.sub("", text)
+    text = BOLD.sub(r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def read_corpus(corpus_dir: Path, strip_code: bool = False) -> list[dict]:
     files = sorted(
         p for p in corpus_dir.rglob("*")
         if p.is_file() and p.suffix.lower() in TEXT_SUFFIXES
@@ -147,6 +184,8 @@ def read_corpus(corpus_dir: Path) -> list[dict]:
         except (UnicodeDecodeError, OSError) as exc:
             print(f"[跳过] {path}: {exc}", file=sys.stderr)
             continue
+        if strip_code:
+            text = strip_non_prose(text)
         documents.append({"source": str(path.relative_to(corpus_dir)), "text": text})
     return documents
 
@@ -161,13 +200,17 @@ def main() -> int:
     parser.add_argument("--overlap", type=int, default=50)
     parser.add_argument("--query-count", type=int, default=150, help="查询条数")
     parser.add_argument("--seed", type=int, default=42, help="固定种子，保证评测集可复现")
+    parser.add_argument("--strip-code", action="store_true",
+                        help="剥离代码块、表格与 Markdown 标记，只留散文。"
+                             "适合生成演示语料；评测语料不要用 —— "
+                             "会丢掉标识符这个 BM25 的优势目标")
     args = parser.parse_args()
 
     corpus_dir = Path(args.corpus_dir)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    documents = read_corpus(corpus_dir)
+    documents = read_corpus(corpus_dir, strip_code=args.strip_code)
     chunker = STRATEGIES[args.strategy]
 
     chunks: list[dict] = []
