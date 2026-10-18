@@ -25,9 +25,12 @@ data/*.bin
 data/*.idx
 
 # 评测产物
-# 注意：recall-baseline.json 是改造前的基线，用来做前后对比，要保留
+# 注意：基线与并发数据要保留 —— 它们是 bench/REPORT.md 里表格的原始来源，
+# 提交它们才能让报告可复现（报告是脚本生成的，但数据得有）。
 bench/results/*
 !bench/results/recall-baseline.json
+!bench/results/concurrent-baseline.json
+!bench/results/concurrent-optimized.json
 eval/results/
 
 # 服务运行日志（dev.ps1 产生）
