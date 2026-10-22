@@ -1,8 +1,25 @@
-# 自研向量检索服务（Java 引擎 + Python 模型服务）
+# 自研混合检索服务（Java 引擎 + Python 模型服务）
 
-从零实现的语义检索服务：**Java 侧自研 HNSW 索引引擎**负责存储与检索，**Python 侧**提供 embedding / rerank 模型服务。不依赖 Faiss、Milvus、Elasticsearch 等任何现成向量检索库。
+从零实现的检索服务：**Java 侧自研 HNSW 图索引与 BM25 倒排索引**负责召回与融合，
+**Python 侧**提供 embedding 与 cross-encoder 精排模型。不依赖 Faiss、Milvus、
+Elasticsearch 等任何现成向量检索库。
 
 > 目标不是"跑通一个 RAG demo"，而是**把检索系统的每一步都做成可测量、可对比、可解释的工程决策**。
+
+仓库地址：https://github.com/WangShTo/vector-search
+
+![应用界面](docs/screenshots/app-compare.png)
+
+| 指标 | 数字 |
+|---|---|
+| 10 万点单次查询（HNSW vs 暴力） | **104.5 µs vs 48.50 ms —— 464 倍** |
+| 同一个索引的 recall@10 / 加速比 | **0.974 / 261 倍**（efSearch=20） |
+| SIMD 距离计算（JDK Vector API） | **286.8 ns → 57.7 ns —— 4.97 倍** |
+| 冷启动：快照恢复 vs 重建索引 | **173 ms vs 113 秒 —— 654 倍** |
+| 二阶段精排带来的 MRR 提升 | **+9% ~ +14%，召回率不变** |
+| 单元测试 | **32 个，全绿** |
+
+所有数字都能用 `.\scripts\run_bench.ps1` 复现，来源见 [`bench/REPORT.md`](bench/REPORT.md)。
 
 ---
 
