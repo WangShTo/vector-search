@@ -1,0 +1,72 @@
+# 生产部署用的 compose —— 与仓库根目录的 docker-compose.yml 区别：
+#
+#   1. 只对外暴露 8080。Python 服务的 8000 只留在容器网络内，
+#      外部不需要、也不应该直接访问它（它没有鉴权，且只该被 Java 调用）。
+#   2. 加了 restart 与日志轮转。日志不限制大小的话，跑几周能把磁盘写满。
+#   3. 项目名固定为 vs-prod，避免和本地开发那份共用同一个数据卷。
+#
+# 用法（在仓库根目录执行）：
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#   docker compose -f deploy/docker-compose.prod.yml logs -f
+#
+# ⚠️ 本文件尚未在真实 Docker 环境跑过（开发机没装 Docker），见 docs/DEPLOY.md。
+
+name: vs-prod
+
+services:
+  model-service:
+    build:
+      context: ../model-service
+    # 不映射端口：外部要访问只能经由 java 服务
+    expose:
+      - "8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      - EMBEDDING_DEVICE=cpu
+      - EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+      - RERANKER_MODEL=BAAI/bge-reranker-base
+      - MAX_BATCH_SIZE=32
+      - BATCH_TIMEOUT_MS=10
+      # 国内服务器直连 huggingface.co 会超时，走镜像
+      - HF_ENDPOINT=https://hf-mirror.com
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      # 首次启动要下载约 400MB 模型，留足时间；之后就很快了
+      start_period: 300s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  vector-search-java:
+    build:
+      context: ../vector-search-java
+    ports:
+      - "8080:8080"
+    environment:
+      - MODEL_SERVICE_URL=http://model-service:8000
+      - VECTOR_SEARCH_DATA_DIR=/app/data/index
+    volumes:
+      # 索引快照与原文。不挂的话重建容器索引就丢了
+      - index-data:/app/data/index
+    depends_on:
+      model-service:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  hf-cache:
+    name: vs-prod-hf-cache
+  index-data:
+    name: vs-prod-index-data

@@ -164,6 +164,17 @@ docker compose up --build
 > `docker compose config`（语法）→ `docker compose build`（构建）→
 > `docker compose up` → `curl localhost:8080/api/stats`。
 
+### 方式四：部署到公网
+
+想给别人一个能点开的地址，看 **[`docs/DEPLOY.md`](docs/DEPLOY.md)**。
+
+里面有内存账（**为什么必须买 4G 而不是 2G**）、购买与部署步骤、
+安全组排查顺序，以及一份只暴露 8080 的生产 compose
+（[`deploy/docker-compose.prod.yml`](deploy/docker-compose.prod.yml)）。
+
+> 简单说：国内云服务器 2核4G，用 `http://公网IP:8080` 访问。
+> **不绑域名就不用备案** —— 备案针对的是「域名 + 80/443」。
+
 ### ⚠️ 两个国内环境的坑
 
 这两个问题都会表现为**静默挂起**，而不是明确的报错，所以单独写出来：
@@ -591,7 +602,11 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 vector-search/
 │
 ├── README.md                     # 门面：架构、快速开始、设计取舍
-├── docker-compose.yml            # 一键部署（两个服务）
+├── LICENSE                       # MIT
+├── docker-compose.yml            # 本地一键起（两个服务）
+│
+├── deploy/
+│   └── docker-compose.prod.yml   # 生产部署：只暴露 8080，带重启与日志轮转
 │
 ├── vector-search-java/           # ── Java 检索服务 ──
 │   └── src/
