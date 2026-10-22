@@ -675,3 +675,13 @@ vector-search/
 | 检索质量评测 | `bench/results/*.md` | `.\scripts\dev.ps1 eval` |
 | 简历文案 | `docs/RESUME.md` | 手工维护，数字引自基准报告 |
 
+---
+
+## License
+
+[MIT](LICENSE) © 2026 WangShTo
+
+可以自由使用、修改、分发，保留版权声明即可。如果这个项目对你有帮助，
+欢迎开 issue 交流 —— 尤其是你发现某个数字复现不出来的时候。
+
+
