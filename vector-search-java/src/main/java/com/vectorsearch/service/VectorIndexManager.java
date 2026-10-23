@@ -206,6 +206,60 @@ public class VectorIndexManager {
                 previous.name(), type, previous.size());
     }
 
+    /**
+     * 墓碑压实：把<b>活着的</b>节点搬进一张新的同类型索引，然后原子替换。
+     *
+     * <h2>为什么需要</h2>
+     * 删除文档用的是墓碑 —— {@link DocumentStore} 只记下 id，索引里的向量和邻居边
+     * 原封不动地留着。这样删除是 O(1) 的，但代价会随时间累积：
+     * <ul>
+     *   <li><b>图里堆死节点</b>：每次检索的 {@code efSearch} 预算有一部分花在
+     *       已删除的节点上，活节点的召回率随之下降。</li>
+     *   <li><b>内存降不下来</b>：向量和边都还在。</li>
+     *   <li><b>结果可能不足 top-k</b>：候选池是固定大小，过滤掉墓碑后可能凑不够。</li>
+     * </ul>
+     *
+     * <h2>为什么不需要重新编码</h2>
+     * <b>不需要重新调用模型</b> —— 向量已经在索引里了，{@link VectorIndex#forEach}
+     * 直接把它们读出来重插即可，省掉的是「把整个语料重新编码一遍」的几分钟。
+     *
+     * <p>但<b>建图开销省不掉</b>：10 万点重建一次图约 113 秒，所以这是
+     * 「偶尔做一次的维护操作」，不是每次删除都要跑的东西。演示规模（百来条）
+     * 下是几百毫秒。
+     *
+     * <h2>为什么要换整张索引而不是原地删</h2>
+     * 原地删除要重建邻居边、修入口点、维护空闲槽位，任何一处漏掉都会让图静默变差 ——
+     * 这正是「索引热更新」被否决的同一个理由。换新图则没有中间状态：
+     * 老索引在替换前一刻都还是完整可用的。
+     *
+     * <h2>代价</h2>
+     * 压实期间两份索引同时存在，<b>内存峰值约 2 倍</b>。
+     *
+     * @return 压实前后的条数与丢弃的节点数
+     */
+    public synchronized CompactOutcome compact() {
+        long start = System.nanoTime();
+        VectorIndex previous = this.index;
+        int before = previous.size();
+
+        VectorIndex fresh = create(indexType);
+        previous.forEach((externalId, vector) -> {
+            if (!documentStore.isDeleted(externalId)) {
+                fresh.add(externalId, vector);
+            }
+        });
+
+        // volatile 写：已经拿到老引用的查询会跑完，新的查询立刻走新图
+        this.index = fresh;
+
+        int after = fresh.size();
+        int removed = before - after;
+        long millis = (System.nanoTime() - start) / 1_000_000L;
+        log.info("稠密索引压实完成: {} -> {} 条（丢弃 {} 个墓碑）, 耗时 {} ms",
+                before, after, removed, millis);
+        return new CompactOutcome(before, after, removed);
+    }
+
     private VectorIndex create(String type) {
         int dimension = properties.index().dimension();
         return switch (type) {
@@ -225,5 +279,15 @@ public class VectorIndexManager {
             int documentCount,
             long elapsedMillis
     ) {
+    }
+
+    /**
+     * 稠密索引的压实结果。
+     *
+     * @param vectorsBefore 压实前的条数（含墓碑）
+     * @param vectorsAfter  压实后的条数（只剩活节点）
+     * @param removed       丢弃的节点数
+     */
+    public record CompactOutcome(int vectorsBefore, int vectorsAfter, int removed) {
     }
 }

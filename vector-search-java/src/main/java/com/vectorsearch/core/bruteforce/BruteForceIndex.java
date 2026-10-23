@@ -22,9 +22,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * <p>复杂度 O(n·d)，n 是向量数、d 是维度，完全无法用于大规模检索 ——
  * 这正是引入 HNSW 的动机。
  *
- * <p><b>并发策略</b>：当前用 {@link ReentrantReadWriteLock}，正确但不是最优。
- * 第 6 周会换成 StampedLock 乐观读，并用压测数据说明收益 ——
- * "我试过 A，B 更好，所以换 B" 才是面试官想听的。
+ * <p><b>并发策略</b>：用 {@link ReentrantReadWriteLock}。曾经的计划是换成
+ * {@link java.util.concurrent.locks.StampedLock} 的乐观读，但先测了锁本身的开销：
+ * 无竞争下一次读锁约 <b>16 ns</b>，而暴力检索遍历全量向量（10 万规模约 48 ms），
+ * 占比不到百万分之一 —— 换锁没有任何可测收益，所以<b>不换</b>。
+ * 测量见 {@code com.vectorsearch.bench.LockOverheadBenchmark}。
  */
 public class BruteForceIndex implements VectorIndex {
 
@@ -99,6 +101,18 @@ public class BruteForceIndex implements VectorIndex {
     @Override
     public int size() {
         return size;
+    }
+
+    @Override
+    public void forEach(IndexedVector visitor) {
+        lock.readLock().lock();
+        try {
+            for (int i = 0; i < size; i++) {
+                visitor.accept(ids[i], vectors[i]);
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override

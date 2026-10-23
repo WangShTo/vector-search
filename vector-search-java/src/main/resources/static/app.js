@@ -556,14 +556,15 @@
 
       (tomb > 0 ? '<div class="panel" style="margin-top:16px;border-color:#4a3a1f">' +
         '<div class="panel-title" style="color:#f0a94c;margin:0">有 ' + tomb + ' 篇文档是逻辑删除</div>' +
-        '<div class="hint" style="margin-top:8px">它们仍然占着索引空间，检索时只是被过滤掉了。' +
-        "要真正回收请重建索引（下面的「清空」会连同数据一起删除；" +
-        "只回收空间需要重新导入原文）。</div></div>" : "") +
+        '<div class="hint" style="margin-top:8px">它们仍然留在索引里，检索时只是被过滤掉了，' +
+        "还会把 BM25 的语料统计拉偏。点下面的「压实索引」可以真正清掉 —— " +
+        "不需要重新导入，也不需要重新调用模型。</div></div>" : "") +
 
       '<div class="panel" style="margin-top:16px">' +
         '<div class="panel-title">操作</div>' +
         '<div class="actions-grid">' +
           '<button class="btn" id="snapshotBtn">保存快照</button>' +
+          '<button class="btn" id="compactBtn">压实索引</button>' +
           '<button class="btn" id="switchBtn">' +
             (s.indexType === "brute-force" ? "切回 HNSW" : "切到暴力检索") + "</button>" +
           '<button class="btn" id="reloadStatsBtn">刷新状态</button>' +
@@ -620,6 +621,27 @@
       } catch (e) {
         toast("保存失败：" + e.message, "err");
         btn.disabled = false; btn.textContent = "保存快照";
+      }
+    });
+
+    $("compactBtn").addEventListener("click", async function () {
+      var btn = $("compactBtn");
+      btn.disabled = true; btn.textContent = "压实中…";
+      try {
+        var r = await api("/api/admin/compact", { method: "POST" });
+        if (r.tombstonesPurged === 0) {
+          toast("没有墓碑需要清理", "ok");
+        } else {
+          toast("已压实：向量 " + r.vectorsBefore + " → " + r.vectorsAfter +
+            "（清掉 " + r.tombstonesPurged + " 个墓碑）· BM25 词表 " +
+            r.termsBefore + " → " + r.termsAfter +
+            " · 平均长度 " + r.averageDocumentLengthBefore.toFixed(1) + " → " +
+            r.averageDocumentLengthAfter.toFixed(1) + " token · " + r.elapsedMillis + " ms", "ok");
+        }
+        await refreshOps();
+      } catch (e) {
+        toast("压实失败：" + e.message, "err");
+        btn.disabled = false; btn.textContent = "压实索引";
       }
     });
 

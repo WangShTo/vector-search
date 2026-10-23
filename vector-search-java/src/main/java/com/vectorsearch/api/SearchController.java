@@ -9,6 +9,7 @@ import com.vectorsearch.client.ModelServiceClient;
 import com.vectorsearch.core.VectorIndex;
 import com.vectorsearch.core.hnsw.HnswIndex;
 import com.vectorsearch.service.DocumentStore;
+import com.vectorsearch.service.IndexMaintenanceService;
 import com.vectorsearch.service.SearchService;
 import com.vectorsearch.service.SparseIndexManager;
 import com.vectorsearch.service.VectorIndexManager;
@@ -33,17 +34,20 @@ public class SearchController {
     private final SparseIndexManager sparseIndexManager;
     private final DocumentStore documentStore;
     private final ModelServiceClient modelServiceClient;
+    private final IndexMaintenanceService maintenanceService;
 
     public SearchController(SearchService searchService,
                             VectorIndexManager indexManager,
                             SparseIndexManager sparseIndexManager,
                             DocumentStore documentStore,
-                            ModelServiceClient modelServiceClient) {
+                            ModelServiceClient modelServiceClient,
+                            IndexMaintenanceService maintenanceService) {
         this.searchService = searchService;
         this.indexManager = indexManager;
         this.sparseIndexManager = sparseIndexManager;
         this.documentStore = documentStore;
         this.modelServiceClient = modelServiceClient;
+        this.maintenanceService = maintenanceService;
     }
 
     /** 语义检索。 */
@@ -101,6 +105,25 @@ public class SearchController {
     public VectorIndexManager.SnapshotResult snapshot() {
         log.info("收到索引落盘请求");
         return indexManager.snapshot();
+    }
+
+    /**
+     * 墓碑压实：把活着的文档搬进新索引，清掉已删除的残留。
+     *
+     * <p>删除用的是墓碑，被删的向量和邻居边都还留在索引里。删得多了会有三个后果：
+     * BM25 的语料统计（IDF、平均文档长度）被墓碑污染、图里死节点占用遍历预算、
+     * 结果可能凑不够 top-k。压实把这三件事一起修好。
+     *
+     * <p><b>不需要重新调用模型</b>：向量已经在索引里，读出来重插即可，
+     * 省掉的是重编码整个语料的几分钟。但建图开销省不掉 ——
+     * 10 万点重建一次图约 113 秒，演示规模（百来条）是几百毫秒。
+     *
+     * <p>没有墓碑时是空操作，直接返回。
+     */
+    @PostMapping("/admin/compact")
+    public IndexMaintenanceService.CompactionResult compact() {
+        log.info("收到索引压实请求");
+        return maintenanceService.compact();
     }
 
     /**

@@ -725,6 +725,29 @@ public class HnswIndex implements VectorIndex {
         return "hnsw";
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>节点在扁平数组里的位置是 {@code node * dimension}，所以每取一个节点
+     * 都要把那段切出来拷成一个独立数组 —— 回调拿到的是副本，改它不会影响索引。
+     *
+     * <p>整个遍历在读锁内完成，看到的是某一时刻的一致快照：压实过程中索引
+     * 仍在对外提供服务，不能让人看到「边已经加了一半」的图。
+     */
+    @Override
+    public void forEach(IndexedVector visitor) {
+        lock.readLock().lock();
+        try {
+            for (int node = 0; node < nodeCount; node++) {
+                float[] vector = new float[dimension];
+                System.arraycopy(vectorStore, node * dimension, vector, 0, dimension);
+                visitor.accept(externalIdStore[node], vector);
+            }
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public HnswParams params() {
         return params;
     }

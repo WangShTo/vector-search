@@ -135,6 +135,34 @@ public class DocumentStore {
     }
 
     /**
+     * 把墓碑真正删掉：从 map 里移除那些被逻辑删除的文档，并清空删除集合。
+     *
+     * <p>配合 {@code VectorIndexManager.compact()} 使用。压缩之前 {@code deletedIds}
+     * 还留着这些 id，是为了让 {@link #getAll()} / {@link #list} 和检索结果继续把它们藏起来；
+     * 一旦索引重建完成、墓碑已经不在新图里，这些 id 就没有存在意义了 ——
+     * 继续留着只会让 {@link #count()} 与真实占用越来越对不上。
+     *
+     * <p><b>不可逆</b>：清掉之后无法恢复原文。
+     *
+     * @return 实际清掉的条数
+     */
+    public int purgeDeleted() {
+        if (deletedIds.isEmpty()) {
+            return 0;
+        }
+        int purged = 0;
+        for (int id : new ArrayList<>(deletedIds)) {
+            // 不调整 totalCharacters：文档在 remove() 那一刻就已经减过了，
+            // 这里只是把残留的原文丢掉，不能再减一次。
+            if (documents.remove(id) != null) {
+                purged++;
+            }
+        }
+        deletedIds.clear();
+        return purged;
+    }
+
+    /**
      * 分页列出存活的文档，按 id 升序。
      *
      * @param keyword 为空则不过滤；否则在原文里做大小写不敏感的子串匹配。

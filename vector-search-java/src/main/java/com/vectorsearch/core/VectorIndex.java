@@ -44,4 +44,38 @@ public interface VectorIndex {
 
     /** 实现名称，用于日志与压测报告。 */
     String name();
+
+    /**
+     * 遍历所有已索引的节点。
+     *
+     * <p>为<b>墓碑压实</b>而存在。删除文档用的是墓碑：只把 id 记进
+     * {@code DocumentStore} 的删除集合，索引里的向量和邻居边都还在。
+     * 时间一长，死节点会占着图里的遍历预算、污染 BM25 的语料统计，
+     * 内存也降不下来。压实的做法是「把活着的节点搬进一张新图，扔掉老图」。
+     *
+     * <p>关键点：<b>压实不需要重新调用模型</b>。向量已经在索引里了，
+     * 读出来直接重插即可，省掉的是把整个语料重新编码一遍的几分钟。
+     * 但要注意，建图本身的开销<b>并没有省掉</b> —— 10 万点重建一次图约 113 秒，
+     * 所以压实是「偶尔做一次的维护操作」，不是每次删除都要跑的东西。
+     *
+     * <p>实现约束：
+     * <ul>
+     *   <li>遍历必须持读锁，给出某一时刻的一致快照 —— 压实期间索引仍在对外服务。</li>
+     *   <li>回调拿到的向量是<b>只读</b>的，不得修改，也不得在回调返回后继续持有。</li>
+     * </ul>
+     *
+     * @param visitor 接收 (业务 id, 向量)
+     */
+    void forEach(IndexedVector visitor);
+
+    /** {@link #forEach} 的回调。 */
+    @FunctionalInterface
+    interface IndexedVector {
+
+        /**
+         * @param externalId 业务 id
+         * @param vector     L2 归一化后的向量，只读
+         */
+        void accept(int externalId, float[] vector);
+    }
 }
