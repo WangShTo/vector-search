@@ -177,6 +177,27 @@ docker compose up --build
 > 简单说：国内云服务器 2核4G，用 `http://公网IP:8080` 访问。
 > **不绑域名就不用备案** —— 备案针对的是「域名 + 80/443」。
 
+### 运行测试
+
+50 个测试，两端各跑各的：
+
+```powershell
+# Java：40 个（核心算法、SIMD、HNSW、分词、BM25、RRF、快照、鉴权）
+cd vector-search-java
+mvn -B -ntp test
+
+# Python：10 个（动态批处理的攒批与切片）
+cd model-service
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # 只装 pytest
+.venv\Scripts\python.exe -m pytest tests -q
+```
+
+Python 侧的测试**不需要下载模型权重**。这不是巧合：`DynamicBatcher` 通过构造参数接收
+`encode_fn`，推理是注入进来的，所以批处理逻辑（合并、按 offset 切片回填、异常传播）
+可以完全脱离 torch 验证。CI 里也只装 `numpy` + `pytest`，整个 job 几秒钟跑完。
+
+上面这两条命令就是 CI 里跑的，[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 每个 push 都执行。
+
 ### ⚠️ 两个国内环境的坑
 
 这两个问题都会表现为**静默挂起**，而不是明确的报错，所以单独写出来：
@@ -629,7 +650,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] **二阶段精排**（cross-encoder，MRR +9~14%，延迟 43ms → 599ms）
 - [x] **应用界面**（检索 / 知识库 / 索引运维三个页面，原生 HTML/CSS/JS 无构建，
       含文档上传、分页管理、逻辑删除、快照落盘、三路对比与阶段耗时条）
-- [x] CI（GitHub Actions，push/PR 自动跑 40 个测试 + Python 语法检查 + 前端资源检查）
+- [x] CI（GitHub Actions，push/PR 自动跑 40 个 Java 测试 + 10 个 Python 测试 + 前端资源检查）
 - [x] **可选管理密钥**（保护 `DELETE` 与 `/api/admin/**`，默认关闭，常数时间比较）
 - [ ] 完全堆外内存（受 Java 21 预览特性限制，留待 JDK 22+，理由见设计取舍 8）
 - [ ] 索引热更新（离线构建新索引，原子替换引用，零停机）
@@ -682,8 +703,11 @@ vector-search/
 │   │   ├── reranker.py           #   Cross-Encoder 精排（懒加载）
 │   │   ├── schemas.py            #   HTTP 契约（字段名与 Java 侧 DTO 一一对应）
 │   │   └── main.py               #   FastAPI 应用
-│   ├── tests/test_batcher.py     #   动态批处理正确性测试
+│   ├── tests/                    #   10 个单元测试（不需要模型权重，见文件头说明）
+│   │   └── test_dynamic_batcher.py
+│   ├── conftest.py               #   pytest 配置（把 model-service 加进 sys.path）
 │   ├── requirements.txt
+│   ├── requirements-dev.txt      #   只有 pytest：测试不需要 torch
 │   └── Dockerfile
 │
 ├── scripts/                      # ── 所有可执行入口 ──

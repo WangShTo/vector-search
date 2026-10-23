@@ -1,0 +1,10 @@
+# 开发与 CI 额外需要的依赖。
+#
+# 这里只有 pytest：测试只需要 numpy（已在 requirements.txt）+ pytest，
+# **不需要** torch / sentence-transformers。
+# 原因见 tests/test_dynamic_batcher.py 顶部：DynamicBatcher 通过构造参数
+# 接收 encode_fn，推理被注入进来，所以批处理逻辑可以脱离模型测试。
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   python -m pytest tests -q
+pytest>=8

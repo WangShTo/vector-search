@@ -24,9 +24,12 @@ jobs:
         working-directory: vector-search-java
         run: mvn -B -ntp test
 
-  # Python 模型服务：只做语法检查，不下载 torch（权重约 1.1 GB，CI 跑不动也没必要）
+  # Python 模型服务：语法检查 + 10 个单元测试
+  # 只装 numpy 和 pytest，不装 torch / sentence-transformers：
+  # 真正被测的 DynamicBatcher 通过构造参数接收 encode_fn，且 EmbeddingModel
+  # 里的 torch 是方法内延迟 import 的，所以测试不需要模型权重（约 1.1 GB）。
   python:
-    name: Python 语法检查
+    name: Python 单元测试
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,8 +39,15 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 安装测试依赖
+        run: pip install numpy pytest
+
       - name: 编译检查
         run: python -m compileall -q model-service/app
+
+      - name: 运行测试
+        working-directory: model-service
+        run: python -m pytest tests -q
 
   # 前端：确认静态资源没被误删（这三个文件是应用的全部前端）
   assets:
