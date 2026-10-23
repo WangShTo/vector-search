@@ -57,19 +57,42 @@
     }, kind === "err" ? 4600 : 2400);
   }
 
+  /* ---------------- 管理密钥 ---------------- */
+  // 只在「删除」和「管理」接口上用到，存在 localStorage，不会发给检索请求。
+  var KEY_STORE = "vs-api-key";
+
+  function adminKey() {
+    try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; }
+  }
+
+  function setAdminKey(v) {
+    try {
+      if (v) localStorage.setItem(KEY_STORE, v);
+      else localStorage.removeItem(KEY_STORE);
+    } catch (e) { /* 隐私模式下写不了，忽略即可 */ }
+  }
+
   async function api(path, opts) {
     opts = opts || {};
     var init = { method: opts.method || (opts.body !== undefined || opts.form ? "POST" : "GET") };
+    var key = adminKey();
     if (opts.form) {
       init.body = opts.form;                       // FormData：不要手写 Content-Type
+      if (key) init.headers = { "X-API-Key": key };
     } else if (opts.body !== undefined) {
       init.headers = { "Content-Type": "application/json" };
+      if (key) init.headers["X-API-Key"] = key;
       init.body = JSON.stringify(opts.body);
+    } else if (key) {
+      init.headers = { "X-API-Key": key };
     }
     var res = await fetch(path, init);
     var text = await res.text();
     var data = {};
     try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+    if (res.status === 401) {
+      throw new Error("需要管理密钥：请在「索引运维」页底部的「管理密钥」里填写");
+    }
     if (!res.ok) {
       throw new Error(data.message || data.error || ("HTTP " + res.status));
     }
@@ -561,6 +584,18 @@
       "</div>" +
 
       '<div class="panel" style="margin-top:16px">' +
+        '<div class="panel-title">管理密钥</div>' +
+        '<div class="hint">服务端配了 VECTOR_SEARCH_API_KEY 时，删除与管理操作需要它。' +
+          "密钥只存在这台浏览器里，检索请求不会带上它。</div>" +
+        '<div class="actions-grid" style="margin-top:12px">' +
+          '<input class="input" id="apiKeyInput" type="password" autocomplete="off" ' +
+            'placeholder="留空表示不使用密钥" value="' + esc(adminKey()) + '">' +
+          '<button class="btn" id="saveKeyBtn">保存密钥</button>' +
+          '<button class="btn ghost" id="clearKeyBtn">清除</button>' +
+        "</div>" +
+      "</div>" +
+
+      '<div class="panel" style="margin-top:16px">' +
         '<div class="panel-title">运行信息</div>' +
         '<div class="kv">' +
           '<div class="k">索引实现</div><div class="v">' + esc(s.indexType) + "</div>" +
@@ -603,6 +638,18 @@
     });
 
     $("reloadStatsBtn").addEventListener("click", function () { refreshOps(); });
+
+    $("saveKeyBtn").addEventListener("click", function () {
+      setAdminKey($("apiKeyInput").value.trim());
+      toast(adminKey() ? "密钥已保存到本浏览器" : "已清空密钥", "ok");
+      refreshOps();
+    });
+
+    $("clearKeyBtn").addEventListener("click", function () {
+      setAdminKey("");
+      toast("已清除本浏览器保存的密钥", "ok");
+      refreshOps();
+    });
 
     $("clearBtn").addEventListener("click", async function () {
       if (!confirm("清空全部 " + s.storedDocuments + " 篇文档？此操作不可恢复。")) return;

@@ -17,7 +17,8 @@ public record VectorSearchProperties(
         String modelServiceUrl,
         int modelTimeoutMs,
         Index index,
-        Search search
+        Search search,
+        Security security
 ) {
 
     /** 兜底默认值，避免 yml 缺项时启动直接 NPE。 */
@@ -33,6 +34,30 @@ public record VectorSearchProperties(
         }
         if (search == null) {
             search = new Search("hybrid", 50, 60, false, 20);
+        }
+        if (security == null) {
+            security = new Security("");
+        }
+    }
+
+    /**
+     * 鉴权配置。
+     *
+     * @param apiKey 管理密钥。**留空表示不启用鉴权**，这是本地开发的默认值 ——
+     *               本地跑着玩还要配个密钥是纯粹的摩擦。
+     *               一旦部署到公网就必须设置，否则任何人都能删光知识库。
+     *               用 {@link Security#enabled()} 判断是否启用，不要直接判空字符串。
+     */
+    public record Security(String apiKey) {
+        public Security {
+            if (apiKey == null) {
+                apiKey = "";
+            }
+            apiKey = apiKey.trim();
+        }
+
+        public boolean enabled() {
+            return !apiKey.isEmpty();
         }
     }
 

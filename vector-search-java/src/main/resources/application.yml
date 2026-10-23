@@ -62,6 +62,19 @@ vector-search:
     # 精排多少条候选。延迟与精度的主旋钮：20 条约几百毫秒，50 条要一秒以上
     rerank-candidates: 20
 
+  security:
+    # 管理密钥。**留空 = 不启用鉴权**（本地开发默认）。
+    #
+    # 启用后，以下接口必须在请求头带 X-API-Key：
+    #   - 任何 DELETE（删文档 / 清空知识库）
+    #   - /api/admin/**（保存快照 / 切换索引）
+    # 检索、统计、文档列表、上传都不拦 —— 这个项目要能当公开 demo 用。
+    #
+    # 部署到公网前**必须**设置，否则任何人拿到地址就能清空知识库。
+    # 用环境变量注入，不要写死在这里（这个文件会被提交）：
+    #   export VECTOR_SEARCH_API_KEY=$(openssl rand -hex 16)
+    api-key: ${VECTOR_SEARCH_API_KEY:}
+
 logging:
   level:
     com.vectorsearch: INFO

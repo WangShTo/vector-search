@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  # Java 检索服务：编译 + 32 个单元测试
+  # Java 检索服务：编译 + 40 个单元测试
   # 注意 JDK 必须是 21：Vector API（jdk.incubator.vector）只有它是稳定可用的孵化模块
   java:
     name: Java 单元测试

@@ -52,6 +52,10 @@ services:
     environment:
       - MODEL_SERVICE_URL=http://model-service:8000
       - VECTOR_SEARCH_DATA_DIR=/app/data/index
+      # 管理密钥。宿主机上 export VECTOR_SEARCH_API_KEY=... 后这里会透传进去。
+      # 留空 = 不鉴权 = 删除与管理接口完全敞开（仅适合本地）。
+      # 对外暴露 8080 时**必须**设置，见 docs/DEPLOY.md 第五节。
+      - VECTOR_SEARCH_API_KEY=${VECTOR_SEARCH_API_KEY:-}
     volumes:
       # 索引快照与原文。不挂的话重建容器索引就丢了
       - index-data:/app/data/index
