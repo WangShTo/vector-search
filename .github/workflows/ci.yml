@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Java 检索服务：编译 + 32 个单元测试
+  # 注意 JDK 必须是 21：Vector API（jdk.incubator.vector）只有它是稳定可用的孵化模块
+  java:
+    name: Java 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 运行测试
+        working-directory: vector-search-java
+        run: mvn -B -ntp test
+
+  # Python 模型服务：只做语法检查，不下载 torch（权重约 1.1 GB，CI 跑不动也没必要）
+  python:
+    name: Python 语法检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 编译检查
+        run: python -m compileall -q model-service/app
+
+  # 前端：确认静态资源没被误删（这三个文件是应用的全部前端）
+  assets:
+    name: 前端资源检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查静态资源存在
+        run: |
+          set -e
+          base=vector-search-java/src/main/resources/static
+          for f in index.html app.css app.js; do
+            test -s "$base/$f" || { echo "缺少或为空: $base/$f"; exit 1; }
+            echo "OK  $f  $(wc -c < "$base/$f") 字节"
+          done

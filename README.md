@@ -7,6 +7,7 @@ Elasticsearch 等任何现成向量检索库。
 > 目标不是"跑通一个 RAG demo"，而是**把检索系统的每一步都做成可测量、可对比、可解释的工程决策**。
 
 仓库地址：https://github.com/WangShTo/vector-search
+[![CI](https://github.com/WangShTo/vector-search/actions/workflows/ci.yml/badge.svg)](https://github.com/WangShTo/vector-search/actions/workflows/ci.yml)
 
 ![应用界面](docs/screenshots/app-compare.png)
 
@@ -576,7 +577,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] Spring Boot 服务化 + 分阶段耗时统计
 - [x] Python 模型服务 + 动态批处理
 - [x] 评测脚手架（语料构建 / 查询生成 / 指标计算）
-- [x] 单元测试（12 个用例，recall 对照暴力检索）
+- [x] 单元测试（32 个用例，recall 对照暴力检索）
 - [x] JMH 微基准（SIMD 距离 / HNSW 检索 / 暴力检索 / 多线程吞吐）
 - [x] 召回率扫描器 + 自动生成基准报告
 - [x] 开发脚本（一键启停 / 灌库 / 冒烟 / 评测）
@@ -588,6 +589,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] **二阶段精排**（cross-encoder，MRR +9~14%，延迟 43ms → 599ms）
 - [x] **应用界面**（检索 / 知识库 / 索引运维三个页面，原生 HTML/CSS/JS 无构建，
       含文档上传、分页管理、逻辑删除、快照落盘、三路对比与阶段耗时条）
+- [x] CI（GitHub Actions，push/PR 自动跑 32 个测试 + Python 语法检查 + 前端资源检查）
 - [ ] 完全堆外内存（受 Java 21 预览特性限制，留待 JDK 22+，理由见设计取舍 8）
 - [ ] 索引热更新（离线构建新索引，原子替换引用，零停机）
 - [ ] `StampedLock` 乐观读（前置条件「读路径无共享写入」已完成）
