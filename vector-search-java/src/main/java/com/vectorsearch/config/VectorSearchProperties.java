@@ -30,7 +30,7 @@ public record VectorSearchProperties(
             modelTimeoutMs = 5000;
         }
         if (index == null) {
-            index = new Index(512, 16, 200, 100, "./data/index", 300, 50);
+            index = new Index(512, 16, 200, 100, "./data/index", 300, 50, "f32");
         }
         if (search == null) {
             search = new Search("hybrid", 50, 60, false, 20);
@@ -109,6 +109,7 @@ public record VectorSearchProperties(
      * @param dataDir          索引落盘目录
      * @param chunkSize        上传文档切块的目标字符数
      * @param chunkOverlap     超长段落硬切时的重叠字符数
+     * @param quantization     向量存储精度：{@code f32}（默认）或 {@code sq8}
      */
     public record Index(
             int dimension,
@@ -117,7 +118,8 @@ public record VectorSearchProperties(
             int efSearch,
             String dataDir,
             int chunkSize,
-            int chunkOverlap
+            int chunkOverlap,
+            String quantization
     ) {
         public Index {
             if (dimension <= 0) {
@@ -141,6 +143,23 @@ public record VectorSearchProperties(
             if (chunkOverlap < 0 || chunkOverlap >= chunkSize) {
                 chunkOverlap = Math.min(50, chunkSize / 4);
             }
+            if (quantization == null || quantization.isBlank()) {
+                quantization = "f32";
+            }
+            quantization = quantization.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!quantization.equals("f32") && !quantization.equals("sq8")) {
+                // 和 default-mode 一样：配置写错就启动失败，不要静默退化成默认值。
+                // 量化写错会让人以为「开了 SQ8」，实际还在跑 f32，内存账全错。
+                throw new IllegalArgumentException(
+                        "vector-search.index.quantization 只能是 f32 / sq8，实际是 " + quantization);
+            }
+        }
+
+        /** 配置值到枚举的映射。 */
+        public com.vectorsearch.core.quant.Quantization toQuantization() {
+            return quantization.equals("sq8")
+                    ? com.vectorsearch.core.quant.Quantization.SQ8
+                    : com.vectorsearch.core.quant.Quantization.NONE;
         }
 
         public HnswParams toHnswParams() {

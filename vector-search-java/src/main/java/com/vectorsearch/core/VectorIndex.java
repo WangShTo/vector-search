@@ -46,6 +46,17 @@ public interface VectorIndex {
     String name();
 
     /**
+     * 向量存储精度。
+     *
+     * <p>暴力索引没有精度概念（它在检索时直接读 float[]），返回
+     * {@link com.vectorsearch.core.quant.Quantization#NONE} 即可 ——
+     * 所以这里给默认实现，而不是逼每个实现都写一遍。
+     */
+    default com.vectorsearch.core.quant.Quantization quantization() {
+        return com.vectorsearch.core.quant.Quantization.NONE;
+    }
+
+    /**
      * 遍历所有已索引的节点。
      *
      * <p>为<b>墓碑压实</b>而存在。删除文档用的是墓碑：只把 id 记进

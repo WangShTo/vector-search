@@ -498,6 +498,75 @@ def section_snapshot(results_dir: Path) -> str:
     return "\n".join(lines)
 
 
+def section_quantization(results_dir: Path) -> str:
+    """SQ8 量化的三角权衡：内存 / 延迟 / 召回。"""
+    data = load_json(results_dir / "quantization.json")
+    if not data:
+        return ""
+
+    variants = data.get("variants") or []
+    if len(variants) < 2:
+        return ""
+
+    ratios = data.get("ratios", {})
+    node_count = data.get("nodeCount", 0)
+    dimension = data.get("dimension", 0)
+    ef_search = data.get("efSearch", 0)
+    top_k = data.get("topK", 10)
+
+    f32 = next((v for v in variants if v.get("mode") == "f32"), variants[0])
+    sq8 = next((v for v in variants if v.get("mode") == "sq8"), variants[-1])
+
+    lines = [
+        "## 六、量化（SQ8）：内存 / 延迟 / 召回",
+        "",
+        f"同一份 {node_count:,} 条 × {dimension} 维数据、同一组查询、同一套 HNSW 参数，"
+        f"只换向量存储精度（efSearch={ef_search}）：",
+        "",
+        "| 精度 | 每向量 | 建图 | 内存 | 快照 | "
+        f"recall@{top_k} | P50 | P95 | P99 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for v in (f32, sq8):
+        per_vector = "2 KB" if v.get("mode") == "f32" else "512 B"
+        lines.append(
+            f"| **{v.get('mode')}** | {per_vector} | {v.get('buildMillis', 0) / 1000:.1f} 秒 | "
+            f"{v.get('estimatedBytes', 0) / 1024 / 1024:.1f} MB | "
+            f"{v.get('snapshotBytes', 0) / 1024 / 1024:.1f} MB | "
+            f"{v.get('recall', 0):.4f} | "
+            f"{v.get('p50Micros', 0):.1f} µs | {v.get('p95Micros', 0):.1f} µs | "
+            f"{v.get('p99Micros', 0):.1f} µs |"
+        )
+
+    lines += [
+        "",
+        f"**内存降到 1/{ratios.get('memory', 0):.2f}，快照降到 1/{ratios.get('snapshot', 0):.2f}，"
+        f"代价是召回 {ratios.get('recallDelta', 0):+.4f}、延迟 ×{ratios.get('latencyP50', 0):.2f}。**",
+        "",
+        "### 这个数字该怎么读",
+        "",
+        "**1. 它是一次「容量优化」，不是「性能优化」。**",
+        "延迟反而涨了 —— 因为本实现把 int8 解码回 float 再算点积：带宽省下来了，",
+        "但每个分量多了一次除法，转换成本盖过了带宽收益。",
+        "真正要快必须用 int8 点积内核（AVX2 的 `dpbusd` 或 Vector API 的 int8 通道），",
+        "**这一步本项目没有做**，所以这里不宣称量化能提速。",
+        "",
+        "**2. 召回确实降了，根因已定位并修过一次。**",
+        "第一版用固定刻度 127（理由：归一化后分量落在 [-1, 1]）。这句话没错，",
+        "但它不是**有效上界**：512 维单位向量的分量只有约 ±0.044，",
+        "等于用 4% 的量程去表示，量化格浪费了 96% —— 当时 recall@10 只有 **0.6567**。",
+        "改成按维度算满量程（4/√d）之后回到上表的水平，剩余差距是量化噪声的下限。",
+        "",
+        "**3. 建图变慢了 2.5 倍左右。** 解码成本同样发生在建图阶段，",
+        "而且图结构会因距离噪声略有变化。要提速同样得靠 int8 内核。",
+        "",
+        "> **结论**：需要省内存时（比如同样的机器要放更多向量）开 SQ8 是划算的；",
+        "> 追求延迟就保持 f32。这个取舍现在有数字支撑，而不是拍脑袋。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def section_hybrid(results_dir: Path) -> str:
     """三种检索模式的对比：向量 / BM25 / 混合。"""
     data = load_json(results_dir / "mode-comparison.json")
@@ -512,7 +581,7 @@ def section_hybrid(results_dir: Path) -> str:
         return ""
 
     lines = [
-        "## 六、三种检索模式的对比",
+        "## 七、三种检索模式的对比",
         "",
         "同一份语料（602 个分块）上对比三条路线。这一节回答的是一个真问题：",
         "**到底该用哪个模式？** 答案取决于查询长什么样。",
@@ -637,7 +706,7 @@ def section_hybrid(results_dir: Path) -> str:
 def section_method(recall: dict) -> str:
     """方法学与局限 —— 必须写，否则是在误导人。"""
     lines = [
-        "## 七、方法学与局限",
+        "## 八、方法学与局限",
         "",
         "### 数据是合成的，不是真实 embedding",
         "",
@@ -707,6 +776,7 @@ def main() -> int:
         section_recall(recall),
         section_concurrency(results_dir),
         section_snapshot(results_dir),
+        section_quantization(results_dir),
         section_hybrid(results_dir),
         section_method(recall),
     ) if s]

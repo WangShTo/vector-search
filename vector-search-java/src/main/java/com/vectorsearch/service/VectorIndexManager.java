@@ -5,6 +5,8 @@ import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.VectorIndex;
 import com.vectorsearch.core.bruteforce.BruteForceIndex;
 import com.vectorsearch.core.hnsw.HnswIndex;
+import com.vectorsearch.core.hnsw.HnswParams;
+import com.vectorsearch.core.quant.Quantization;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,8 @@ public class VectorIndexManager {
 
     /** 支持的索引类型。 */
     public static final String TYPE_HNSW = "hnsw";
+    /** 与 {@link #TYPE_HNSW} 同一套算法，但向量按 int8 量化存储（内存约 1/4）。 */
+    public static final String TYPE_HNSW_SQ8 = "hnsw-sq8";
     public static final String TYPE_BRUTE_FORCE = "brute-force";
 
     private static final String INDEX_FILE_NAME = "vector-index.snapshot";
@@ -57,10 +61,13 @@ public class VectorIndexManager {
     public VectorIndexManager(VectorSearchProperties properties, DocumentStore documentStore) {
         this.properties = properties;
         this.documentStore = documentStore;
-        this.indexType = TYPE_HNSW;
-        this.index = create(TYPE_HNSW);
-        log.info("向量索引已初始化: {} (dim={}, HNSW 参数 {})",
-                index.name(), index.dimension(), properties.index().toHnswParams());
+        // 初始精度由配置决定；一旦有快照，恢复时会按快照里的精度覆盖
+        this.indexType = properties.index().toQuantization() == Quantization.SQ8
+                ? TYPE_HNSW_SQ8 : TYPE_HNSW;
+        this.index = create(this.indexType);
+        log.info("向量索引已初始化: {} (dim={}, 精度 {}, HNSW 参数 {})",
+                index.name(), index.dimension(), index.quantization().code(),
+                properties.index().toHnswParams());
         // 把解析后的绝对路径打出来：相对路径怎么解析的不该让人猜
         log.info("索引数据目录: {}", dataDir());
     }
@@ -95,14 +102,16 @@ public class VectorIndexManager {
             }
 
             this.index = restored;
-            this.indexType = TYPE_HNSW;
+            // 精度跟着快照走，不跟着配置走：快照里存的是什么精度，恢复出来就是什么精度
+            this.indexType = restored.quantization() == Quantization.SQ8
+                    ? TYPE_HNSW_SQ8 : TYPE_HNSW;
 
             int documents = documentStore.load(documentsPath());
             long millis = (System.nanoTime() - start) / 1_000_000L;
             this.restoredInMillis = millis;
 
-            log.info("已从快照恢复索引: {} 条向量, {} 篇文档, 耗时 {} ms（若重建图需数分钟）",
-                    restored.size(), documents, millis);
+            log.info("已从快照恢复索引: {} 条向量（{} 精度）, {} 篇文档, 耗时 {} ms（若重建图需数分钟）",
+                    restored.size(), restored.quantization().code(), documents, millis);
         } catch (IOException e) {
             log.error("加载索引快照失败，从空索引开始（可删除 {} 后重新灌数据）: {}",
                     indexFile, e.getMessage());
@@ -262,11 +271,15 @@ public class VectorIndexManager {
 
     private VectorIndex create(String type) {
         int dimension = properties.index().dimension();
+        HnswParams hnswParams = properties.index().toHnswParams();
         return switch (type) {
-            case TYPE_HNSW -> new HnswIndex(dimension, properties.index().toHnswParams());
+            case TYPE_HNSW -> new HnswIndex(dimension, hnswParams);
+            // 同一套建图/检索代码，只是每条向量从 4 字节压到 1 字节
+            case TYPE_HNSW_SQ8 -> new HnswIndex(dimension, hnswParams, 42L, Quantization.SQ8);
             case TYPE_BRUTE_FORCE -> new BruteForceIndex(dimension);
             default -> throw new IllegalArgumentException(
-                    "未知索引类型: " + type + "（可选 " + TYPE_HNSW + " / " + TYPE_BRUTE_FORCE + "）");
+                    "未知索引类型: " + type + "（可选 " + TYPE_HNSW + " / " + TYPE_HNSW_SQ8
+                            + " / " + TYPE_BRUTE_FORCE + "）");
         };
     }
 

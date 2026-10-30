@@ -32,6 +32,14 @@ vector-search:
     ef-construction: 200
     # 查询时的候选池大小，越大越准越慢 —— 这是 recall/延迟 的主旋钮
     ef-search: 100
+    # 向量存储精度：
+    #   f32      —— 每向量 4×dim 字节（默认，精度最高）
+    #   sq8      —— 每向量 dim 字节，内存降到约 1/3.35，代价 recall@10 约 -0.08
+    # 注意 sq8 只是「容量优化」不是「性能优化」：本实现把 int8 解码回 float
+    # 再算点积，延迟反而高约 40%（见 bench/REPORT.md 第六节）。
+    # 建索引后的精度以索引自身为准，这个值只影响「新建」的索引；
+    # 已有索引的精度随快照一起存，恢复时不会被这里覆盖。
+    quantization: f32
     # 索引落盘目录。
     # 注意：相对路径是相对「服务进程的工作目录」解析的，不是项目根目录。
     # 从 vector-search-java/ 启动时实际落在 vector-search-java/data/index/，

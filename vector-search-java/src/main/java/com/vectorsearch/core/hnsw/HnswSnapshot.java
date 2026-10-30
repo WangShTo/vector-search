@@ -1,5 +1,7 @@
 package com.vectorsearch.core.hnsw;
 
+import com.vectorsearch.core.quant.ScalarQuantizer;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -57,7 +59,19 @@ public final class HnswSnapshot {
     private static final byte[] MAGIC = {'V', 'S', 'R', 'C', 'H', 'I', 'D', 'X'};
 
     /** 格式版本。字段布局变化时递增。 */
-    public static final int FORMAT_VERSION = 1;
+    /**
+     * 当前写出的格式版本。
+     *
+     * <ul>
+     *   <li><b>v1</b>：向量段固定是 float32。</li>
+     *   <li><b>v2</b>：头部第 52 字节多一个「存储精度」标记，
+     *       向量段可能是 float32（0）或 int8（1）。v1 文件该位置是预留的 0，
+     *       所以按 v1 读出来自然就是 float32 —— 旧快照仍然可读。</li>
+     *   <li><b>v3</b>：头部第 56 字节多一个 SQ8 量化刻度（float）。v2 的 SQ8 文件
+     *       用的是固定刻度 127，读取时按 127 解码，同样兼容。</li>
+     * </ul>
+     */
+    public static final int FORMAT_VERSION = 3;
 
     private static final int HEADER_BYTES = 64;
     /**
@@ -97,11 +111,14 @@ public final class HnswSnapshot {
             int m,
             int efConstruction,
             double levelMultiplier,
+            /** SQ8 的量化刻度；f32 或 v1/v2 旧文件为 0（读取时回落到固定刻度）。 */
+            float quantScale,
             int nodeCount,
             int entryPoint,
             int maxLevel,
             int upperStoreSize,
             float[] vectorStore,
+            byte[] quantizedStore,
             int[] externalIdStore,
             byte[] levelStore,
             int[] layer0Links,
@@ -140,7 +157,9 @@ public final class HnswSnapshot {
 
             // 逐段写数据，同时算出每段的偏移、长度与 CRC
             long offset = dataStart;
-            segments[SEG_VECTORS] = writeFloats(ch, data.vectorStore());
+            segments[SEG_VECTORS] = data.quantizedStore() != null
+                    ? writeBytes(ch, data.quantizedStore())
+                    : writeFloats(ch, data.vectorStore());
             segments[SEG_EXTERNAL_IDS] = writeInts(ch, data.externalIdStore());
             segments[SEG_LEVELS] = writeBytes(ch, data.levelStore());
             segments[SEG_LAYER0_LINKS] = writeInts(ch, data.layer0Links());
@@ -185,6 +204,11 @@ public final class HnswSnapshot {
         buf.putInt(data.maxLevel());
         buf.putInt(data.upperStoreSize());
         buf.putInt(SEGMENT_COUNT);
+        // 52 字节处：向量段精度。0 = float32，1 = int8（SQ8）
+        buf.putInt(data.quantizedStore() != null ? 1 : 0);
+        // 56 字节处：SQ8 的量化刻度。刻度不同就是两套编码，
+        // 不写进文件的话读回来的向量会「看起来正常但全错」
+        buf.putFloat(data.quantScale());
         // 剩余字节留作将来扩展，现在是 0
         buf.position(HEADER_BYTES);
         buf.flip();
@@ -235,9 +259,9 @@ public final class HnswSnapshot {
             }
 
             int version = header.getInt();
-            if (version != FORMAT_VERSION) {
+            if (version < 1 || version > FORMAT_VERSION) {
                 throw new IOException("快照格式版本不支持: 文件是 v" + version
-                        + "，当前支持 v" + FORMAT_VERSION + "。请重建索引。");
+                        + "，当前支持 v1 ~ v" + FORMAT_VERSION + "。请重建索引。");
             }
 
             int dimension = header.getInt();
@@ -249,6 +273,20 @@ public final class HnswSnapshot {
             int maxLevel = header.getInt();
             int upperStoreSize = header.getInt();
             int segmentCount = header.getInt();
+
+            // v2 起多一个「向量存储精度」标记；v1 文件这个位置是预留字节，读出来是 0
+            int storageMode = header.getInt();
+            if (storageMode != 0 && storageMode != 1) {
+                throw new IOException("未知的向量存储精度标记: " + storageMode
+                        + "（0 = float32，1 = int8）");
+            }
+
+            // v3 起多了量化刻度。v2 文件用的是固定 127（分量按 [-1,1] 理解），
+            // 必须按老刻度解码，否则读回来的向量会整体缩放错
+            float quantScale = version >= 3 ? header.getFloat() : ScalarQuantizer.LEGACY_SCALE;
+            if (storageMode == 1 && quantScale <= 0) {
+                throw new IOException("SQ8 快照的量化刻度无效: " + quantScale);
+            }
 
             if (segmentCount != SEGMENT_COUNT) {
                 throw new IOException("段数不匹配: 文件 " + segmentCount
@@ -272,7 +310,12 @@ public final class HnswSnapshot {
 
             // 按段读回数组。长度由元数据推导，并与段表里的长度交叉校验。
             int maxLinks0 = m * 2;
-            float[] vectorStore = readFloats(ch, segments[SEG_VECTORS], (long) nodeCount * dimension);
+            float[] vectorStore = storageMode == 0
+                    ? readFloats(ch, segments[SEG_VECTORS], (long) nodeCount * dimension)
+                    : null;
+            byte[] quantizedStore = storageMode == 1
+                    ? readBytes(ch, segments[SEG_VECTORS], (long) nodeCount * dimension)
+                    : null;
             int[] externalIdStore = readInts(ch, segments[SEG_EXTERNAL_IDS], nodeCount);
             byte[] levelStore = readBytes(ch, segments[SEG_LEVELS], nodeCount);
             int[] layer0Links = readInts(ch, segments[SEG_LAYER0_LINKS], (long) nodeCount * maxLinks0);
@@ -280,9 +323,9 @@ public final class HnswSnapshot {
             int[] upperStore = readInts(ch, segments[SEG_UPPER_STORE], upperStoreSize);
             int[] upperOffset = readInts(ch, segments[SEG_UPPER_OFFSET], nodeCount);
 
-            return new Data(dimension, m, efConstruction, levelMultiplier,
+            return new Data(dimension, m, efConstruction, levelMultiplier, quantScale,
                     nodeCount, entryPoint, maxLevel, upperStoreSize,
-                    vectorStore, externalIdStore, levelStore,
+                    vectorStore, quantizedStore, externalIdStore, levelStore,
                     layer0Links, layer0Count, upperStore, upperOffset);
         }
     }

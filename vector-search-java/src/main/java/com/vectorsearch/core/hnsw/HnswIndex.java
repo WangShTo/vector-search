@@ -4,6 +4,8 @@ import com.vectorsearch.core.DistanceMetrics;
 import com.vectorsearch.core.DistanceMetricsSimd;
 import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.VectorIndex;
+import com.vectorsearch.core.quant.Quantization;
+import com.vectorsearch.core.quant.ScalarQuantizer;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -79,7 +81,40 @@ public class HnswIndex implements VectorIndex {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // ---------- 扁平存储 ----------
+    /**
+     * f32 模式下的向量存储。SQ8 模式下为 {@code null}。
+     *
+     * <p>两个存储互斥：任一时刻只有一个非 null，所有访问点都必须先看
+     * {@link #quantization}，不能直接假设 {@code vectorStore} 一定可用。
+     */
     private float[] vectorStore;
+
+    /** SQ8 模式下的 int8 向量存储，第 i 条向量占 {@code dimension} 个字节。 */
+    private byte[] quantizedStore;
+
+    /**
+     * SQ8 的量化刻度（{@code q = clamp(round(x * quantScale))}）。
+     *
+     * <p>它必须跟着索引走并写进快照 —— 刻度不同就等于两套编码，
+     * 用错的刻度解码出来的向量「看起来正常」，结果却全错，这类 bug 极难排查。
+     */
+    private float quantScale;
+
+    /** 向量存储精度。{@link Quantization#NONE} 时全部走 f32 路径，行为与量化前完全一致。 */
+    private final Quantization quantization;
+
+    /**
+     * 建图时当前节点的 float 形态。
+     *
+     * <p>SQ8 下存储里已经是 int8 了，但插入时用来做「查询点」的仍是这条向量的
+     * 原始精度版本 —— 否则量化误差会在建图阶段被放大成结构错误。
+     */
+    private float[] buildBuffer;
+
+    /** 解码用的线程本地缓冲。检索路径是热路径，不能每次 malloc。 */
+    private final ThreadLocal<float[]> decodeScratchA = new ThreadLocal<>();
+    private final ThreadLocal<float[]> decodeScratchB = new ThreadLocal<>();
+
     private int[] externalIdStore;
     private byte[] levelStore;
     private int[] layer0Links;
@@ -128,6 +163,14 @@ public class HnswIndex implements VectorIndex {
      *             压测报告要可复现，随机图会让两次跑的 recall 对不上
      */
     public HnswIndex(int dimension, HnswParams params, long seed) {
+        this(dimension, params, seed, Quantization.NONE);
+    }
+
+    /**
+     * @param quantization 向量存储精度。{@link Quantization#SQ8} 用 1/4 的内存换量化噪声，
+     *                     代价与收益见 {@link ScalarQuantizer} 的类注释
+     */
+    public HnswIndex(int dimension, HnswParams params, long seed, Quantization quantization) {
         if (dimension <= 0) {
             throw new IllegalArgumentException("dimension 必须为正数: " + dimension);
         }
@@ -137,6 +180,8 @@ public class HnswIndex implements VectorIndex {
         }
         this.dimension = dimension;
         this.params = params;
+        this.quantization = quantization == null ? Quantization.NONE : quantization;
+        this.quantScale = ScalarQuantizer.recommendedScale(dimension);
         this.random = new Random(seed);
         this.capacity = INITIAL_CAPACITY;
         allocate(capacity);
@@ -148,7 +193,15 @@ public class HnswIndex implements VectorIndex {
 
     private void allocate(int newCapacity) {
         this.capacity = newCapacity;
-        this.vectorStore = new float[newCapacity * dimension];
+        if (quantization == Quantization.SQ8) {
+            // 互斥：SQ8 时不分配 float 存储，否则内存翻倍就白省了
+            this.vectorStore = null;
+            this.quantizedStore = new byte[newCapacity * dimension];
+        } else {
+            this.vectorStore = new float[newCapacity * dimension];
+            this.quantizedStore = null;
+        }
+        this.buildBuffer = new float[dimension];
         this.externalIdStore = new int[newCapacity];
         this.levelStore = new byte[newCapacity];
         this.layer0Links = new int[newCapacity * params.mMax0()];
@@ -166,9 +219,15 @@ public class HnswIndex implements VectorIndex {
         int newCapacity = Math.max(required, capacity * 2);
 
         // 步长固定，整块拷贝即可
-        float[] newVectors = new float[newCapacity * dimension];
-        System.arraycopy(vectorStore, 0, newVectors, 0, nodeCount * dimension);
-        vectorStore = newVectors;
+        if (quantization == Quantization.SQ8) {
+            byte[] grown = new byte[newCapacity * dimension];
+            System.arraycopy(quantizedStore, 0, grown, 0, nodeCount * dimension);
+            quantizedStore = grown;
+        } else {
+            float[] newVectors = new float[newCapacity * dimension];
+            System.arraycopy(vectorStore, 0, newVectors, 0, nodeCount * dimension);
+            vectorStore = newVectors;
+        }
 
         int[] newLayer0 = new int[newCapacity * params.mMax0()];
         System.arraycopy(layer0Links, 0, newLayer0, 0, nodeCount * params.mMax0());
@@ -246,14 +305,62 @@ public class HnswIndex implements VectorIndex {
     private float similarity(float[] query, int queryOffset, int nodeId) {
         // 用 SIMD：距离计算是建图与查询的绝对热点。
         // 512 维下实测 61.3ns vs 标量 326.6ns（见 bench/REPORT.md）。
+        if (quantization == Quantization.SQ8) {
+            float[] scratch = decodeScratch(decodeScratchA);
+            ScalarQuantizer.decode(quantizedStore, nodeId * dimension, scratch, 0, dimension, quantScale);
+            return DistanceMetricsSimd.dot(query, queryOffset, scratch, 0, dimension);
+        }
         return DistanceMetricsSimd.dot(
                 query, queryOffset, vectorStore, nodeId * dimension, dimension);
     }
 
     /** 两个节点之间比。 */
     private float similarityNodes(int nodeA, int nodeB) {
+        if (quantization == Quantization.SQ8) {
+            float[] a = decodeScratch(decodeScratchA);
+            float[] b = decodeScratch(decodeScratchB);
+            ScalarQuantizer.decode(quantizedStore, nodeA * dimension, a, 0, dimension, quantScale);
+            ScalarQuantizer.decode(quantizedStore, nodeB * dimension, b, 0, dimension, quantScale);
+            return DistanceMetricsSimd.dot(a, 0, b, 0, dimension);
+        }
         return DistanceMetricsSimd.dot(
                 vectorStore, nodeA * dimension, vectorStore, nodeB * dimension, dimension);
+    }
+
+    /** 取（必要时分配）线程本地的解码缓冲。 */
+    private float[] decodeScratch(ThreadLocal<float[]> holder) {
+        float[] scratch = holder.get();
+        if (scratch == null || scratch.length != dimension) {
+            scratch = new float[dimension];
+            holder.set(scratch);
+        }
+        return scratch;
+    }
+
+    /**
+     * 把一条<b>已归一化</b>的向量写进存储。
+     *
+     * <p>f32 原样拷贝；SQ8 量化后写入 —— 量化发生在<b>入库时</b>，
+     * 之后所有距离计算用的都是量化后的值，存与算看到的是同一份数据。
+     * 如果入库存 float、检索时才现量化，内存一点没省，只是白加一层误差。
+     */
+    private void storeVector(int nodeId, float[] normalized) {
+        int base = nodeId * dimension;
+        if (quantization == Quantization.SQ8) {
+            ScalarQuantizer.encode(normalized, 0, quantizedStore, base, dimension, quantScale);
+        } else {
+            System.arraycopy(normalized, 0, vectorStore, base, dimension);
+        }
+    }
+
+    /** 把第 {@code nodeId} 条向量读成 float（SQ8 下是解码，f32 下是拷贝）。 */
+    private void readVector(int nodeId, float[] out) {
+        int base = nodeId * dimension;
+        if (quantization == Quantization.SQ8) {
+            ScalarQuantizer.decode(quantizedStore, base, out, 0, dimension, quantScale);
+        } else {
+            System.arraycopy(vectorStore, base, out, 0, dimension);
+        }
     }
 
     // =====================================================================
@@ -276,11 +383,12 @@ public class HnswIndex implements VectorIndex {
 
         int nodeId = nodeCount;
         int level = randomLevel();
-        int vectorOffset = nodeId * dimension;
-
-        // 向量直接写进扁平存储，就地归一化 —— 不产生任何临时数组
-        System.arraycopy(vector, 0, vectorStore, vectorOffset, dimension);
-        DistanceMetrics.normalizeInPlace(vectorStore, vectorOffset, dimension);
+        // 归一到构建缓冲，再按存储精度写进去 —— 不产生任何临时数组。
+        // 建图阶段的「查询点」也用它：SQ8 下存储里已经是 int8，
+        // 若拿解码值去建图，量化误差会在邻居选择时被放大成结构错误。
+        System.arraycopy(vector, 0, buildBuffer, 0, dimension);
+        DistanceMetrics.normalizeInPlace(buildBuffer, 0, dimension);
+        storeVector(nodeId, buildBuffer);
 
         externalIdStore[nodeId] = externalId;
         levelStore[nodeId] = (byte) level;
@@ -305,9 +413,10 @@ public class HnswIndex implements VectorIndex {
             return;
         }
 
-        // 查询就是刚写进存储的这个节点本身，用偏移量指过去
-        float[] query = vectorStore;
-        int queryOffset = vectorOffset;
+        // 查询就是刚写进构建缓冲的这个节点本身；f32 与 SQ8 走同一条路径，
+        // 都是「一份 float 数组 + 偏移量 0」
+        float[] query = buildBuffer;
+        int queryOffset = 0;
 
         int current = entryPoint;
         float currentSim = similarity(query, queryOffset, current);
@@ -652,11 +761,13 @@ public class HnswIndex implements VectorIndex {
                     params.m(),
                     params.efConstruction(),
                     params.levelMultiplier(),
+                    quantScale,
                     nodeCount,
                     entryPoint,
                     maxLevel,
                     upperStoreSize,
-                    Arrays.copyOf(vectorStore, nodeCount * dimension),
+                    vectorStore == null ? null : Arrays.copyOf(vectorStore, nodeCount * dimension),
+                    quantizedStore == null ? null : Arrays.copyOf(quantizedStore, nodeCount * dimension),
                     Arrays.copyOf(externalIdStore, nodeCount),
                     Arrays.copyOf(levelStore, nodeCount),
                     Arrays.copyOf(layer0Links, nodeCount * maxLinks0),
@@ -680,7 +791,10 @@ public class HnswIndex implements VectorIndex {
     public static HnswIndex readFrom(Path path) throws IOException {
         HnswSnapshot.Data data = HnswSnapshot.read(path);
         HnswParams params = new HnswParams(data.m(), data.efConstruction(), data.levelMultiplier());
-        HnswIndex index = new HnswIndex(data.dimension(), params, 42L);
+        // 精度跟着文件走：快照里是 int8，就必须用 SQ8 模式恢复，
+        // 否则会拿 float 布局去解释 int8 字节，读出满屏垃圾
+        Quantization quantization = data.quantizedStore() != null ? Quantization.SQ8 : Quantization.NONE;
+        HnswIndex index = new HnswIndex(data.dimension(), params, 42L, quantization);
         index.restore(data);
         return index;
     }
@@ -691,7 +805,17 @@ public class HnswIndex implements VectorIndex {
         allocate(capacityNeeded);
         ensureUpperStore(Math.max(data.upperStoreSize(), INITIAL_UPPER_STORE));
 
-        System.arraycopy(data.vectorStore(), 0, vectorStore, 0, data.nodeCount() * dimension);
+        // 刻度必须在解压之前恢复 —— 否则后面所有距离都会用错的编码解释
+        if (data.quantScale() > 0) {
+            this.quantScale = data.quantScale();
+        }
+
+        if (quantization == Quantization.SQ8) {
+            System.arraycopy(data.quantizedStore(), 0, quantizedStore, 0,
+                    data.nodeCount() * dimension);
+        } else {
+            System.arraycopy(data.vectorStore(), 0, vectorStore, 0, data.nodeCount() * dimension);
+        }
         System.arraycopy(data.externalIdStore(), 0, externalIdStore, 0, data.nodeCount());
         System.arraycopy(data.levelStore(), 0, levelStore, 0, data.nodeCount());
         System.arraycopy(data.layer0Links(), 0, layer0Links, 0,
@@ -722,7 +846,7 @@ public class HnswIndex implements VectorIndex {
 
     @Override
     public String name() {
-        return "hnsw";
+        return quantization == Quantization.SQ8 ? "hnsw-sq8" : "hnsw";
     }
 
     /**
@@ -740,7 +864,7 @@ public class HnswIndex implements VectorIndex {
         try {
             for (int node = 0; node < nodeCount; node++) {
                 float[] vector = new float[dimension];
-                System.arraycopy(vectorStore, node * dimension, vector, 0, dimension);
+                readVector(node, vector);
                 visitor.accept(externalIdStore[node], vector);
             }
         } finally {
@@ -750,6 +874,11 @@ public class HnswIndex implements VectorIndex {
 
     public HnswParams params() {
         return params;
+    }
+
+    /** 向量存储精度。f32 索引返回 {@link Quantization#NONE}。 */
+    public Quantization quantization() {
+        return quantization;
     }
 
     /** 图的最大层号，即入口点所在层。 */
@@ -844,7 +973,10 @@ public class HnswIndex implements VectorIndex {
     public long estimatedBytes() {
         lock.readLock().lock();
         try {
-            return (long) capacity * dimension * Float.BYTES
+            int bytesPerVector = quantization == Quantization.SQ8
+                    ? quantization.bytesPerVector(dimension)
+                    : dimension * Float.BYTES;
+            return (long) capacity * bytesPerVector
                     + (long) capacity * Integer.BYTES      // externalIdStore
                     + (long) capacity                       // levelStore
                     + (long) capacity * params.mMax0() * Integer.BYTES
