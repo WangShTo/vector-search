@@ -52,6 +52,8 @@ bench/results/*
 !bench/results/recall-baseline.json
 !bench/results/concurrent-baseline.json
 !bench/results/concurrent-optimized.json
+# 量化对比要跑两次 10 万点建图（f32 68s + sq8 168s），本机复跑成本不低，数据一并提交
+!bench/results/quantization.json
 eval/results/
 
 # 服务运行日志（dev.ps1 产生）

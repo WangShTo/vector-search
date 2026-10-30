@@ -1,0 +1,34 @@
+{
+  "nodeCount" : 100000,
+  "dimension" : 512,
+  "m" : 16,
+  "efConstruction" : 200,
+  "efSearch" : 50,
+  "topK" : 10,
+  "recallQueries" : 60,
+  "variants" : [ {
+    "mode" : "f32",
+    "buildMillis" : 68353,
+    "estimatedBytes" : 287103672,
+    "snapshotBytes" : 219149468,
+    "recall" : 0.9983,
+    "p50Micros" : 68.7,
+    "p95Micros" : 93.1,
+    "p99Micros" : 151.7
+  }, {
+    "mode" : "sq8",
+    "buildMillis" : 168204,
+    "estimatedBytes" : 85777080,
+    "snapshotBytes" : 65549468,
+    "recall" : 0.915,
+    "p50Micros" : 96.1,
+    "p95Micros" : 131.3,
+    "p99Micros" : 167.1
+  } ],
+  "ratios" : {
+    "memory" : 3.3471,
+    "snapshot" : 3.3433,
+    "latencyP50" : 1.3988,
+    "recallDelta" : -0.0833
+  }
+}
