@@ -125,7 +125,7 @@
 
   /* ---------------- 检索页 ---------------- */
 
-  var S = { mode: "hybrid", rerank: false, compare: false, busy: false, source: "" };
+  var S = { mode: "hybrid", rerank: false, compare: false, busy: false, sources: [] };
 
   function renderSearch() {
     titleEl.textContent = "检索";
@@ -138,6 +138,12 @@
     if (MODES.indexOf(m) >= 0) S.mode = m;
     if (params.get("rerank") === "1") S.rerank = true;
     if (params.get("compare") === "1") S.compare = true;
+    // 来源多选也支持深链：?sources=a.md,b.md（逗号分隔，整体做 URL 编码）
+    if (params.get("sources")) {
+      S.sources = params.get("sources").split(",")
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s.length > 0; });
+    }
 
     viewEl.innerHTML =
       '<div class="panel">' +
@@ -198,7 +204,8 @@
       });
     });
 
-    // 来源筛选：来源是动态的（取决于导入了哪些文件），所以从后端取
+    // 来源筛选：来源是动态的（取决于导入了哪些文件），所以从后端取。
+    // 支持多选 —— 「全部」清空选择，单个来源点一下加入或移出。
     api("/api/documents/sources").then(function (counts) {
       counts = counts || {};
       var names = Object.keys(counts);
@@ -210,25 +217,61 @@
         return;
       }
       var group = row.querySelector(".group");
+      var allChip = group.querySelector(".chip");
+      // 启动时 location.replace("#/search") 会让视图渲染两次，
+      // 两个请求都会落到同一个（新的）节点上，导致胶囊被追加两遍。
+      // 用节点上的标记做幂等，只保证「这一个节点只填一次」。
+      if (group.dataset.populated === "1") {
+        return;
+      }
+      group.dataset.populated = "1";
+      var total = 0;
+      names.forEach(function (k) { total += counts[k] || 0; });
+      // 深链里写的来源可能已经不存在了（文件被删），丢掉它们，
+      // 否则界面上一个都不高亮、请求却带着无效条件，看起来像「搜不到东西」
+      S.sources = S.sources.filter(function (s) { return names.indexOf(s) >= 0; });
+
+      function paint() {
+        allChip.dataset.active = S.sources.length === 0 ? "1" : "0";
+        group.querySelectorAll(".chip[data-source]").forEach(function (x) {
+          var name = x.dataset.source;
+          if (!name) return;
+          x.dataset.active = S.sources.indexOf(name) >= 0 ? "1" : "0";
+        });
+        if (S.sources.length === 0) {
+          $("sourceHint").textContent = "按来源过滤会把条件下推到图遍历里";
+          return;
+        }
+        var matched = 0;
+        S.sources.forEach(function (s) { matched += counts[s] || 0; });
+        // 说清这一下发生了什么：不是「搜完再筛」，而是把条件下推进图遍历
+        $("sourceHint").textContent =
+          "只看 " + S.sources.length + " 个来源（" + matched + " 篇 / 共 " + total +
+          " 篇），范围之外的候选不会占用名额";
+      }
+
+      allChip.addEventListener("click", function () {
+        S.sources = [];
+        paint();
+      });
+
       names.forEach(function (name) {
         var chip = document.createElement("span");
         chip.className = "chip";
         chip.dataset.source = name;
         chip.textContent = name + " (" + counts[name] + ")";
         chip.addEventListener("click", function () {
-          S.source = chip.dataset.source;
-          group.querySelectorAll(".chip").forEach(function (x) {
-            x.dataset.active = x.dataset.source === S.source ? "1" : "0";
-          });
-          // 说清这一下发生了什么：不是「搜完再筛」，而是把条件下推进图遍历
-          $("sourceHint").textContent = S.source
-            ? "只在「" + S.source + "」里检索（" + counts[S.source] + " 篇 / 共 " +
-              Object.values(counts).reduce(function (a, b) { return a + b; }, 0) +
-              " 篇），搜索范围之外的候选不会占用名额"
-            : "按来源过滤会把条件下推到图遍历里";
+          var at = S.sources.indexOf(name);
+          if (at >= 0) {
+            S.sources.splice(at, 1);
+          } else {
+            S.sources.push(name);
+          }
+          paint();
         });
         group.appendChild(chip);
       });
+      paint();
     }).catch(function () {
       // 拿不到来源就保持「全部」，不影响检索本身
     });
@@ -379,12 +422,12 @@
     try {
       if (S.compare) {
         var results = await Promise.all(MODES.map(function (m) {
-          return api("/api/search", { body: { query: q, topK: 8, mode: m, rerank: S.rerank, source: S.source || null } });
+          return api("/api/search", { body: { query: q, topK: 8, mode: m, rerank: S.rerank, sources: S.sources.length ? S.sources : null } });
         }));
         renderCompareResult(results);
       } else {
         var resp = await api("/api/search", {
-          body: { query: q, topK: 10, mode: S.mode, rerank: S.rerank, source: S.source || null }
+          body: { query: q, topK: 10, mode: S.mode, rerank: S.rerank, sources: S.sources.length ? S.sources : null }
         });
         renderSingleResult(resp);
       }

@@ -5,6 +5,10 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * 检索请求。
  *
@@ -52,11 +56,42 @@ public record SearchRequest(
          * <p>这是<b>带过滤的检索</b>，不是「搜完再筛」：过滤条件会下推到图遍历里。
          * 两者的差别在低选择性下是数量级的 —— 只占 1% 的来源，搜完再筛 recall 接近 0，
          * 下推之后仍然能到 0.94。实测见 {@code bench/REPORT.md} 第八节。
+         *
+         * <p>选多个来源时用 {@link #sources()}。两个字段都给时取并集，
+         * 单值版本保留是因为它是绝大多数调用方的写法。
          */
-        String source
+        String source,
+
+        /**
+         * 在多个来源里检索（并集）。与 {@link #source()} 同时给出时取并集。
+         *
+         * <p>并集的选择性 = 各来源篇数之和 / 存活文档数 —— 因为一篇文档只属于一个来源，
+         * 各来源的集合天然互斥。如果将来支持多值标签，这条就要改成去重后的并集大小。
+         */
+        List<String> sources
 ) {
 
     public int topKOrDefault() {
         return topK == null ? 10 : topK;
+    }
+
+    /**
+     * 归一化后的来源集合：{@code sources} 与 {@code source} 的并集，去空白。
+     *
+     * @return 不可变集合；没有来源限制时为空集
+     */
+    public Set<String> sourceSet() {
+        Set<String> wanted = new LinkedHashSet<>();
+        if (sources != null) {
+            for (String s : sources) {
+                if (s != null && !s.isBlank()) {
+                    wanted.add(s.trim());
+                }
+            }
+        }
+        if (source != null && !source.isBlank()) {
+            wanted.add(source.trim());
+        }
+        return wanted;
     }
 }

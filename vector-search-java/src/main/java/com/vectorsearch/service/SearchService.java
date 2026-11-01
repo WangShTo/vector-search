@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 检索编排：文本 → 向量 / 词项 → 索引查询 → 融合 → 回填原文。
@@ -85,8 +86,9 @@ public class SearchService {
                 : properties.search().rerankDefault();
 
         // 来源过滤：把「只在这个文件里找」变成索引能理解的谓词
-        java.util.function.IntPredicate filter = sourceFilter(request.source());
-        double selectivity = selectivity(request.source());
+        Set<String> wantedSources = request.sourceSet();
+        java.util.function.IntPredicate filter = sourceFilter(wantedSources);
+        double selectivity = selectivity(wantedSources);
         // 过滤会把候选池里的名额筛掉且不补回来，所以 ef 要按选择性放大
         int efEffective = effectiveEf(efSearch, pool, selectivity);
 
@@ -234,31 +236,43 @@ public class SearchService {
      * 让索引通过谓词来问「这个 id 合不合格」，职责就分清了 ——
      * 明天要按时间、按标签过滤，索引一行都不用改。
      */
-    private java.util.function.IntPredicate sourceFilter(String source) {
-        if (source == null || source.isBlank()) {
+    private java.util.function.IntPredicate sourceFilter(Set<String> wanted) {
+        if (wanted == null || wanted.isEmpty()) {
             return null;
         }
-        String wanted = source.trim();
-        return id -> wanted.equals(documentStore.sourceOf(id));
+        // 集合只读、查询期间不变，可以安全地在检索线程里共享
+        Set<String> snapshot = Set.copyOf(wanted);
+        return id -> snapshot.contains(documentStore.sourceOf(id));
     }
 
     /**
      * 来源的选择性 = 匹配文档数 / 存活文档数。
      *
-     * <p>不过滤时返回 1。来源不存在时返回一个极小的正数 ——
-     * 反正匹配不到东西，多遍历一些也无所谓，但别让它除零。
+     * <p>多选来源时是<b>各来源篇数之和</b>：一篇文档只属于一个来源，集合天然互斥，
+     * 所以求和就是并集大小。（如果将来支持多值标签，这里要改成去重后的并集 ——
+     * 直接求和会把重叠部分算两遍，选择性被高估，ef 就会给小。）
+     *
+     * <p>不过滤时返回 1。来源全都不存在时也返回 1 —— 让 ef 保持常规值，
+     * 反正是空结果，没必要为它把候选池撑到 4096。
      */
-    private double selectivity(String source) {
-        if (source == null || source.isBlank()) {
+    private double selectivity(Set<String> wanted) {
+        if (wanted == null || wanted.isEmpty()) {
             return 1.0;
         }
         int total = documentStore.count();
         if (total <= 0) {
             return 1.0;
         }
-        Integer matching = documentStore.sourceCounts().get(source.trim());
-        if (matching == null || matching <= 0) {
-            return 1.0 / total;
+        java.util.Map<String, Integer> counts = documentStore.sourceCounts();
+        long matching = 0;
+        for (String source : wanted) {
+            Integer n = counts.get(source);
+            if (n != null) {
+                matching += n;
+            }
+        }
+        if (matching <= 0) {
+            return 1.0;
         }
         return Math.min(1.0, (double) matching / total);
     }

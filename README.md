@@ -180,10 +180,10 @@ docker compose up --build
 
 ### 运行测试
 
-78 个测试，两端各跑各的：
+84 个测试，两端各跑各的：
 
 ```powershell
-# Java：68 个（核心算法、SIMD、HNSW、分词、BM25、RRF、快照、量化、带过滤的检索、鉴权）
+# Java：74 个（核心算法、SIMD、HNSW、分词、BM25、RRF、快照、量化、带过滤的检索、鉴权）
 cd vector-search-java
 mvn -B -ntp test
 
@@ -306,9 +306,12 @@ id→原文映射。三者必须保持一致：只热换图而 BM25 还是旧的
 http://localhost:8080/?q=efSearch 参数是干什么的&mode=bm25
 http://localhost:8080/?q=为什么测代码速度不能只跑一遍&compare=1
 http://localhost:8080/?q=读得多写得少的时候该选哪种同步方式&mode=hybrid&rerank=1
+
+# 只看某几个来源（逗号分隔，整体 URL 编码）
+http://localhost:8080/?q=分层图怎么找最近邻&sources=01-hnsw-原理.md,03-java-性能优化.md
 ```
 
-支持 `q` / `mode` / `rerank=1` / `compare=1`。
+支持 `q` / `mode` / `rerank=1` / `compare=1` / `sources=a.md,b.md`。
 
 > **应用里的语料与评测语料是两份，别搞混。**
 >
@@ -361,12 +364,18 @@ curl -X POST http://localhost:8080/api/search \
 > 如果 `embeddingMs` 远大于 `searchMs`，说明瓶颈在跨进程调用而不是索引本身——
 > 这时候去调 HNSW 参数是南辕北辙。这个字段就是为了让这种误判不可能发生。
 
-只在一个文件里找，加 `source`（上传时的文件名）：
+只在一个文件里找，加 `source`（上传时的文件名）；多个文件用 `sources`（并集）：
 
 ```bash
 curl -X POST http://localhost:8080/api/search \
   -H "Content-Type: application/json" \
   -d '{"query": "分层图的近似最近邻", "topK": 5, "source": "性能报告.md"}'
+
+# 多选：这几个文件里一起找
+curl -X POST http://localhost:8080/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "分层图的近似最近邻", "topK": 5,
+       "sources": ["性能报告.md", "项目说明.md"]}'
 
 # 有哪些来源、各自多少篇
 curl http://localhost:8080/api/documents/sources
@@ -719,6 +728,10 @@ BM25 侧要遍历每条 posting list 把它摘掉，同样是 O(词表)。
 规则落在 `SearchService.effectiveEf`，选择性来自 `DocumentStore.sourceCounts()`
 （维护成计数器而不是每次现数 —— 十万篇上现数一遍比检索本身还贵）。
 
+**多选来源时，并集大小 = 各来源篇数之和**：一篇文档只属于一个来源，集合天然互斥。
+如果将来支持多值标签，这里必须改成去重后的并集 —— 直接求和会把重叠部分算两遍，
+选择性被高估，ef 就会给小，召回静默下降。
+
 完整数据见 [`bench/REPORT.md`](bench/REPORT.md) 第八节。
 
 ---
@@ -775,7 +788,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] Spring Boot 服务化 + 分阶段耗时统计
 - [x] Python 模型服务 + 动态批处理
 - [x] 评测脚手架（语料构建 / 查询生成 / 指标计算）
-- [x] 单元测试（**68 个**用例，含 recall 对照暴力检索、过滤检索、量化、快照往返）
+- [x] 单元测试（**74 个**用例，含 recall 对照暴力检索、过滤检索、量化、快照往返）
 - [x] JMH 微基准（SIMD 距离 / HNSW 检索 / 暴力检索 / 多线程吞吐）
 - [x] 召回率扫描器 + 自动生成基准报告
 - [x] 开发脚本（一键启停 / 灌库 / 冒烟 / 评测）
@@ -787,7 +800,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] **二阶段精排**（cross-encoder，MRR +9~14%，延迟 43ms → 599ms）
 - [x] **应用界面**（检索 / 知识库 / 索引运维三个页面，原生 HTML/CSS/JS 无构建，
       含文档上传、分页管理、逻辑删除、快照落盘、三路对比与阶段耗时条）
-- [x] CI（GitHub Actions，push/PR 自动跑 68 个 Java 测试 + 10 个 Python 测试 + 前端资源检查）
+- [x] CI（GitHub Actions，push/PR 自动跑 74 个 Java 测试 + 10 个 Python 测试 + 前端资源检查）
 - [x] **可选管理密钥**（保护 `DELETE` 与 `/api/admin/**`，默认关闭，常数时间比较）
 - [x] **墓碑压实**（活节点搬进新图 + BM25 整表重建 + 清墓碑，不重新调用模型）
 - [x] **SQ8 量化**（int8 存储：内存 273.8 → 81.8 MB，recall 0.9983 → 0.9150，延迟 ×1.4）
