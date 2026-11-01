@@ -90,7 +90,12 @@ public class SearchController {
                         Math.round(sparseIndexManager.averageDocumentLength() * 10) / 10.0),
                 indexManager.restoredInMillis(),
                 modelServiceClient.isHealthy(),
-                documentStore.deletedCount());
+                documentStore.deletedCount(),
+                new StatsResponse.MaintenanceStats(
+                        maintenanceService.autoCompactEnabled(),
+                        maintenanceService.autoCompactRatio(),
+                        Math.round(maintenanceService.tombstoneRatio() * 1000) / 1000.0,
+                        maintenanceService.autoCompactions()));
     }
 
     /**

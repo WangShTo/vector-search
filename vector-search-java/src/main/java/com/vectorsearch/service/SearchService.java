@@ -85,9 +85,11 @@ public class SearchService {
                 ? request.rerank()
                 : properties.search().rerankDefault();
 
-        // 来源过滤：把「只在这个文件里找」变成索引能理解的谓词
+        // 过滤 = 未删除 ∧ 来源匹配。两者是同一类事：都在回答
+        // 「索引里的这一条，能不能占一个候选名额」。所以合成一个谓词推给索引，
+        // 而不是一个推下去、另一个等结果回来再筛。
         Set<String> wantedSources = request.sourceSet();
-        java.util.function.IntPredicate filter = sourceFilter(wantedSources);
+        java.util.function.IntPredicate filter = liveFilter(wantedSources);
         double selectivity = selectivity(wantedSources);
         // 过滤会把候选池里的名额筛掉且不补回来，所以 ef 要按选择性放大
         int efEffective = effectiveEf(efSearch, pool, selectivity);
@@ -106,8 +108,6 @@ public class SearchService {
         if (needDense) {
             float[][] embedded = modelServiceClient.embed(List.of(request.query()));
             embeddingEndsAt = System.nanoTime();
-            // 谓词按 externalId 判，索引不知道原文里哪些 id 已被逻辑删除；
-            // 这两件事是正交的，删除过滤仍在下面统一做
             denseHits = indexManager.search(embedded[0], pool, efEffective, filter);
         }
         if (needSparse) {
@@ -230,12 +230,29 @@ public class SearchService {
     private static final int MAX_EFFECTIVE_EF = 4096;
 
     /**
-     * 把「来源」变成按 id 判的谓词。
+     * 把「未删除」与「来源」合成一个按 id 判的谓词。
+     *
+     * <p><b>删除为什么也要推下去</b>：逻辑删除只往 {@code DocumentStore} 记一个 id，
+     * 向量和倒排表都还在。如果等结果回来才筛，被删掉的文档照样占着 ef 预算里的名额，
+     * 而且是「占了还不补」—— 删得越多，活节点的召回越差，直到有人手动压实。
+     * 推下去之后删除和来源过滤走同一条路：死节点在遍历时就被跳过。
      *
      * <p>为什么来源不塞进索引：索引只管向量和 id，来源是业务属性。
      * 让索引通过谓词来问「这个 id 合不合格」，职责就分清了 ——
      * 明天要按时间、按标签过滤，索引一行都不用改。
+     *
+     * <p>只在真有墓碑时才包一层删除判断：没有墓碑时保持 {@code null}，
+     * 检索路径上一次额外的 map 查找都不做。
      */
+    private java.util.function.IntPredicate liveFilter(Set<String> wanted) {
+        java.util.function.IntPredicate source = sourceFilter(wanted);
+        if (documentStore.deletedCount() == 0) {
+            return source;
+        }
+        java.util.function.IntPredicate alive = id -> !documentStore.isDeleted(id);
+        return source == null ? alive : id -> alive.test(id) && source.test(id);
+    }
+
     private java.util.function.IntPredicate sourceFilter(Set<String> wanted) {
         if (wanted == null || wanted.isEmpty()) {
             return null;
@@ -246,7 +263,12 @@ public class SearchService {
     }
 
     /**
-     * 来源的选择性 = 匹配文档数 / 存活文档数。
+     * 选择性 = 合格的条目数 / <b>索引里的条目数</b>。
+     *
+     * <p>分母用 {@code totalCount()}（含墓碑）而不是存活文档数：索引遍历时采到的
+     * 是索引里的条目，墓碑也是条目之一，只不过过不了谓词。
+     * 用存活数当分母会把选择性系统性高估 —— 墓碑越多偏得越厉害，
+     * 而偏差的方向恰好是「ef 给小」，正好是召回最怕的那一侧。
      *
      * <p>多选来源时是<b>各来源篇数之和</b>：一篇文档只属于一个来源，集合天然互斥，
      * 所以求和就是并集大小。（如果将来支持多值标签，这里要改成去重后的并集 ——
@@ -256,25 +278,28 @@ public class SearchService {
      * 反正是空结果，没必要为它把候选池撑到 4096。
      */
     private double selectivity(Set<String> wanted) {
+        int population = documentStore.totalCount();
+        if (population <= 0) {
+            return 1.0;
+        }
+        long matching;
         if (wanted == null || wanted.isEmpty()) {
-            return 1.0;
-        }
-        int total = documentStore.count();
-        if (total <= 0) {
-            return 1.0;
-        }
-        java.util.Map<String, Integer> counts = documentStore.sourceCounts();
-        long matching = 0;
-        for (String source : wanted) {
-            Integer n = counts.get(source);
-            if (n != null) {
-                matching += n;
+            // 没有来源条件时，合格的只有存活文档；墓碑就是不可见的那些
+            matching = documentStore.count();
+        } else {
+            java.util.Map<String, Integer> counts = documentStore.sourceCounts();
+            matching = 0;
+            for (String source : wanted) {
+                Integer n = counts.get(source);
+                if (n != null) {
+                    matching += n;
+                }
+            }
+            if (matching <= 0) {
+                return 1.0;
             }
         }
-        if (matching <= 0) {
-            return 1.0;
-        }
-        return Math.min(1.0, (double) matching / total);
+        return Math.min(1.0, (double) matching / population);
     }
 
     /**

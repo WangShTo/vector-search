@@ -18,7 +18,8 @@ public record VectorSearchProperties(
         int modelTimeoutMs,
         Index index,
         Search search,
-        Security security
+        Security security,
+        Maintenance maintenance
 ) {
 
     /** 兜底默认值，避免 yml 缺项时启动直接 NPE。 */
@@ -37,6 +38,32 @@ public record VectorSearchProperties(
         }
         if (security == null) {
             security = new Security("");
+        }
+        if (maintenance == null) {
+            maintenance = new Maintenance(true, 0.1);
+        }
+    }
+
+    /**
+     * 索引维护配置。
+     *
+     * @param autoCompact        删除后是否在后台自动压实。关掉就退回「手动调
+     *                           {@code POST /api/admin/compact}」的老行为。
+     * @param autoCompactRatio   墓碑占索引条目的比例达到多少就触发。
+     *                           0.1 的意思是「删掉了十分之一就该整理了」——
+     *                           墓碑不清理有两个后果：候选名额被死节点吃掉，
+     *                           以及检索要为了补偿而放大 ef。但它也不能太频繁：
+     *                           压实要把整张图重建一遍，10 万点要一百多秒。
+     */
+    public record Maintenance(boolean autoCompact, double autoCompactRatio) {
+        public Maintenance {
+            if (autoCompactRatio <= 0 || autoCompactRatio >= 1) {
+                // 写错就报错，不要静默接受 —— 0 会让每次删除都触发重建，
+                // 1 会让它永远不触发，两个都很难从「服务变慢了」倒推出来
+                throw new IllegalArgumentException(
+                        "vector-search.maintenance.auto-compact-ratio 必须在 (0,1) 之间，实际是 "
+                                + autoCompactRatio);
+            }
         }
     }
 

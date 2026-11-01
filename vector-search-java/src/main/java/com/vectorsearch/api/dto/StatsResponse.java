@@ -26,8 +26,25 @@ public record StatsResponse(
         Long restoredInMillis,
         Boolean modelServiceHealthy,
         /** 逻辑删除的文档数。要真正回收这些空间必须重建索引。 */
-        int tombstones
+        int tombstones,
+        MaintenanceStats maintenance
 ) {
+
+    /**
+     * 索引维护的状态。
+     *
+     * @param autoCompact        删除后是否会自动压实
+     * @param autoCompactRatio   墓碑占比到多少触发
+     * @param tombstoneRatio     当前墓碑占比（分母是索引条目数，含墓碑）
+     * @param autoCompactions    已经自动压实过几次
+     */
+    public record MaintenanceStats(
+            boolean autoCompact,
+            double autoCompactRatio,
+            double tombstoneRatio,
+            int autoCompactions
+    ) {
+    }
 
     /**
      * BM25 稀疏索引的规模指标。

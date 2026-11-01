@@ -209,11 +209,35 @@ public class DocumentStore {
      * @return 实际清掉的条数
      */
     public int purgeDeleted() {
-        if (deletedIds.isEmpty()) {
+        return purgeDeleted(deletedIds);
+    }
+
+    /**
+     * 只清掉指定的一批墓碑。
+     *
+     * <p><b>为什么需要这一版</b>：压实是「先按存活文档重建索引、再清墓碑」两段，
+     * 中间不是原子的。如果这里无脑清空 {@code deletedIds}，那么在重建之后、
+     * 清理之前刚被删掉的文档也会被一起清掉 —— 它的原文没了，但它<b>已经被
+     * 重建进新图了</b>（重建时它还活着）。结果就是图里挂着一个查不到原文的死节点：
+     * 检索返回一个 id，界面上却是空白。
+     *
+     * <p>所以压实方必须先拍下「我这次重建排除了哪些 id」，只清这一批。
+     * 之后新来的删除继续以墓碑形式留着，下次压实再处理 —— 它们在检索时
+     * 本来就会被过滤掉，不会泄漏。
+     *
+     * @param ids 调用方确认「已不在新索引里」的那些 id
+     * @return 实际清掉的条数
+     */
+    public int purgeDeleted(java.util.Collection<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
             return 0;
         }
         int purged = 0;
-        for (int id : new ArrayList<>(deletedIds)) {
+        for (int id : new ArrayList<>(ids)) {
+            // 只有仍然是墓碑的才清：如果中途被重新 put 回来，它是活文档，不能动
+            if (!deletedIds.remove(id)) {
+                continue;
+            }
             // 不调整 totalCharacters：文档在 remove() 那一刻就已经减过了，
             // 这里只是把残留的原文丢掉，不能再减一次。
             if (documents.remove(id) != null) {
@@ -222,8 +246,12 @@ public class DocumentStore {
             // 来源计数同理，remove() 时已经减过，这里只清元数据本身
             metadata.remove(id);
         }
-        deletedIds.clear();
         return purged;
+    }
+
+    /** 当前墓碑 id 的快照，供压实方「只清自己排除过的那批」。 */
+    public java.util.Set<Integer> deletedIdSnapshot() {
+        return java.util.Set.copyOf(deletedIds);
     }
 
     /**

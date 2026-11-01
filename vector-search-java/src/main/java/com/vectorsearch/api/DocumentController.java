@@ -4,6 +4,7 @@ import com.vectorsearch.api.dto.IndexDocumentRequest;
 import com.vectorsearch.config.VectorSearchProperties;
 import com.vectorsearch.core.TextSplitter;
 import com.vectorsearch.service.DocumentStore;
+import com.vectorsearch.service.IndexMaintenanceService;
 import com.vectorsearch.service.SearchService;
 import com.vectorsearch.service.VectorIndexManager;
 import org.slf4j.Logger;
@@ -48,15 +49,18 @@ public class DocumentController {
     private final SearchService searchService;
     private final VectorIndexManager indexManager;
     private final VectorSearchProperties properties;
+    private final IndexMaintenanceService maintenance;
 
     public DocumentController(DocumentStore documentStore,
                               SearchService searchService,
                               VectorIndexManager indexManager,
-                              VectorSearchProperties properties) {
+                              VectorSearchProperties properties,
+                              IndexMaintenanceService maintenance) {
         this.documentStore = documentStore;
         this.searchService = searchService;
         this.indexManager = indexManager;
         this.properties = properties;
+        this.maintenance = maintenance;
     }
 
     /**
@@ -97,6 +101,10 @@ public class DocumentController {
      * 逻辑删除一篇文档。
      *
      * <p>删除后立刻落盘 —— 否则重启一次被删的文档就"复活"了。
+     *
+     * <p>删除是<b>即时生效</b>的：检索会把「已删除」当过滤条件推进遍历，
+     * 被删的文档从下一次查询起就再也占不到候选名额。
+     * 这里再顺手看一眼墓碑占比，到阈值就在后台压实一次（把内存和 BM25 统计量收回来）。
      */
     @DeleteMapping("/{id}")
     public MutationResult delete(@PathVariable int id) {
@@ -104,6 +112,7 @@ public class DocumentController {
         if (removed) {
             log.info("逻辑删除文档 id={}", id);
             persistQuietly("删除");
+            maintenance.maybeAutoCompact();
         }
         return new MutationResult(removed ? 1 : 0, documentStore.count(),
                 documentStore.deletedCount());

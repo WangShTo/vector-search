@@ -627,6 +627,8 @@
     var sparse = s.sparse || {};
     var hnsw = s.hnsw || {};
     var tomb = s.tombstones || 0;
+    var maint = s.maintenance || {};
+    var ratioPct = Math.round((maint.tombstoneRatio || 0) * 1000) / 10;
 
     viewEl.innerHTML =
       '<div class="cards">' +
@@ -641,10 +643,16 @@
       "</div>" +
 
       (tomb > 0 ? '<div class="panel" style="margin-top:16px;border-color:#4a3a1f">' +
-        '<div class="panel-title" style="color:#f0a94c;margin:0">有 ' + tomb + ' 篇文档是逻辑删除</div>' +
-        '<div class="hint" style="margin-top:8px">它们仍然留在索引里，检索时只是被过滤掉了，' +
-        "还会把 BM25 的语料统计拉偏。点下面的「压实索引」可以真正清掉 —— " +
-        "不需要重新导入，也不需要重新调用模型。</div></div>" : "") +
+        '<div class="panel-title" style="color:#f0a94c;margin:0">有 ' + tomb + ' 篇文档是逻辑删除' +
+        "（占索引 " + ratioPct + "%）</div>" +
+        '<div class="hint" style="margin-top:8px">' +
+        "<b>检索已经立刻不受影响了</b>：删除判断被推进到遍历里，死节点占不到候选名额。" +
+        "但它们还占着向量内存，也还在把 BM25 的语料统计拉偏 —— " +
+        (maint.autoCompact
+          ? "占比到 " + Math.round((maint.autoCompactRatio || 0) * 100) + "% 会自动压实一次（已自动压实 " +
+            (maint.autoCompactions || 0) + " 次），也可以点下面的「压实索引」立刻做。"
+          : "自动压实已关闭，需要手动点「压实索引」。") +
+        "</div></div>" : "") +
 
       '<div class="panel" style="margin-top:16px">' +
         '<div class="panel-title">操作</div>' +
@@ -691,6 +699,12 @@
             "  efConstruction=" + (hnsw.efConstruction != null ? hnsw.efConstruction : "—") + "</div>" +
           '<div class="k">原文总字符</div><div class="v">' + fmtNum(s.characterCount) + "</div>" +
           '<div class="k">模型服务</div><div class="v">' + (s.modelServiceHealthy ? "正常" : "不可用") + "</div>" +
+          '<div class="k">自动压实</div><div class="v">' +
+            (maint.autoCompact
+              ? "开（墓碑占比 ≥ " + Math.round((maint.autoCompactRatio || 0) * 100) + "% 时触发，已执行 " +
+                (maint.autoCompactions || 0) + " 次）"
+              : "关（只能手动压实）") + "</div>" +
+          '<div class="k">墓碑占比</div><div class="v">' + ratioPct + "%</div>" +
           '<div class="k">启动恢复耗时</div><div class="v">' +
             (s.restoredInMillis != null ? s.restoredInMillis + " ms（未重建图）" : "—（本次未从快照恢复）") + "</div>" +
         "</div>" +

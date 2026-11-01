@@ -83,6 +83,21 @@ vector-search:
     #   export VECTOR_SEARCH_API_KEY=$(openssl rand -hex 16)
     api-key: ${VECTOR_SEARCH_API_KEY:}
 
+    maintenance:
+      # 删除后是否自动压实。
+      #
+      # 先分清两件事：
+      #   即时生效 —— 删除之后，检索会把「已删除」当过滤条件推进遍历，
+      #              被删的文档从下一次查询起就占不到候选名额（默认行为，无开关）。
+      #   回收内存 —— HNSW 没法删单点（拿掉一个节点会断开几十条边），
+      #              只能重建整张图；BM25 的 IDF 和平均长度也是全局统计量。
+      #              所以「真正清理」只能按比例批量做，这就是这里配的东西。
+      auto-compact: true
+      # 墓碑占索引条目的比例达到多少触发。
+      # 0.1 = 删掉十分之一就整理。太小会把重建变成高频操作
+      # （10 万点重建一百多秒），太大则内存白白被死节点占着。
+      auto-compact-ratio: 0.1
+
 logging:
   level:
     com.vectorsearch: INFO

@@ -23,7 +23,7 @@ class ApiKeyFilterTest {
 
     private static VectorSearchProperties props(String key) {
         return new VectorSearchProperties(
-                null, 0, null, null, new VectorSearchProperties.Security(key));
+                null, 0, null, null, new VectorSearchProperties.Security(key), null);
     }
 
     private static MockHttpServletResponse run(ApiKeyFilter filter, String method, String path,

@@ -1,8 +1,16 @@
 package com.vectorsearch.service;
 
+import com.vectorsearch.config.VectorSearchProperties;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 索引维护：墓碑压实。
@@ -23,6 +31,12 @@ import org.springframework.stereotype.Component;
  *   <li><b>结果可能不足 top-k</b>：候选池大小固定，过滤掉墓碑后可能凑不够数。</li>
  * </ol>
  *
+ * <p>后两条现在有一层<b>查询期</b>的缓解：{@code SearchService.liveFilter} 把删除判断
+ * 推进到遍历里，死节点不再占用候选名额，选择性也按「含墓碑的条目数」算，
+ * ef 会自动放大。也就是说<b>删除之后，检索立刻就不受影响了</b>。
+ * 压实剩下的价值是把内存和语料统计量收回来 —— 墓碑还占着向量内存，
+ * 也还在污染 BM25 的 IDF 与平均长度。两件事都要做，但紧急程度不同。
+ *
  * <h2>三件事必须一起做</h2>
  *
  * <p>稠密索引、稀疏索引、原文存储三者描述的是同一批文档。只重建其中一个，
@@ -40,13 +54,118 @@ public class IndexMaintenanceService {
     private final VectorIndexManager vectorIndexManager;
     private final SparseIndexManager sparseIndexManager;
     private final DocumentStore documentStore;
+    private final VectorSearchProperties properties;
+    private final Executor executor;
 
+    /** 单飞标记：同时只允许一次自动压实排队，避免批量删除放大成 N 次重建。 */
+    private final AtomicBoolean compacting = new AtomicBoolean();
+
+    private final AtomicInteger autoCompactions = new AtomicInteger();
+
+    private final java.util.concurrent.ExecutorService worker =
+            Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "index-compaction");
+                // 后台线程，不能拦住 JVM 退出
+                thread.setDaemon(true);
+                return thread;
+            });
+
+    @Autowired
     public IndexMaintenanceService(VectorIndexManager vectorIndexManager,
                                    SparseIndexManager sparseIndexManager,
-                                   DocumentStore documentStore) {
+                                   DocumentStore documentStore,
+                                   VectorSearchProperties properties) {
+        this(vectorIndexManager, sparseIndexManager, documentStore, properties, null);
+    }
+
+    /** 测试用：传一个同步执行的 executor，自动压实就不用等线程了。 */
+    IndexMaintenanceService(VectorIndexManager vectorIndexManager,
+                            SparseIndexManager sparseIndexManager,
+                            DocumentStore documentStore,
+                            VectorSearchProperties properties,
+                            Executor executor) {
         this.vectorIndexManager = vectorIndexManager;
         this.sparseIndexManager = sparseIndexManager;
         this.documentStore = documentStore;
+        this.properties = properties;
+        this.executor = executor != null ? executor : worker;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        worker.shutdownNow();
+    }
+
+    /** 已经自动压实过几次，给运维页看。 */
+    public int autoCompactions() {
+        return autoCompactions.get();
+    }
+
+    public boolean autoCompactEnabled() {
+        return properties.maintenance().autoCompact();
+    }
+
+    public double autoCompactRatio() {
+        return properties.maintenance().autoCompactRatio();
+    }
+
+    /** 当前墓碑占比（0~1），没有条目时返回 0。 */
+    public double tombstoneRatio() {
+        int population = documentStore.totalCount();
+        return population <= 0 ? 0 : (double) documentStore.deletedCount() / population;
+    }
+
+    /**
+     * 删除之后调用：墓碑占比够高就在后台压实一次。
+     *
+     * <p>为什么是「占比触发」而不是「每次删除都清理」：<b>HNSW 没法删除单点</b>。
+     * 一个节点连着几十条边，拿掉它会让图断开、后面所有人的检索都变差。
+     * 所以「即时清理」在向量索引这里的正确含义是「立刻让它不参与检索」，
+     * 也就是把删除判断推进到遍历里（见 {@code SearchService.liveFilter}），
+     * 真正的空间回收只能靠重建整张图 —— 那就必须按比例批量做，不能按条做。
+     *
+     * <p>BM25 理论上可以精确删掉一篇：记下它的词表，逐个词把 posting 里的那一条拿掉。
+     * 但代价是 O(该文档词表的每个词在倒排表里的长度)，长尾高频词能到全库量级；
+     * 而且删完 IDF 和平均长度要重算，一样是全局的。所以两条索引统一走压实。
+     *
+     * @return 是否真的触发了一次自动压实（便于测试与观测）
+     */
+    public boolean maybeAutoCompact() {
+        VectorSearchProperties.Maintenance config = properties.maintenance();
+        if (!config.autoCompact()) {
+            return false;
+        }
+        int tombstones = documentStore.deletedCount();
+        int population = documentStore.totalCount();
+        if (tombstones == 0 || population == 0) {
+            return false;
+        }
+        double ratio = (double) tombstones / population;
+        if (ratio < config.autoCompactRatio()) {
+            return false;
+        }
+        if (!compacting.compareAndSet(false, true)) {
+            // 已经有一次在排队或正在跑。它压完之后墓碑就没了，
+            // 再排一次只是重复重建整张图
+            return false;
+        }
+        log.info("墓碑 {} / {} 条（{}%）达到阈值 {}%，排队自动压实",
+                tombstones, population,
+                String.format("%.1f", ratio * 100),
+                String.format("%.0f", config.autoCompactRatio() * 100));
+        executor.execute(() -> {
+            try {
+                compact();
+                autoCompactions.incrementAndGet();
+            } catch (RuntimeException e) {
+                // 不能把异常吞掉：压失败意味着图里还有死节点，
+                // 下一次删除会再试 —— 但日志里必须留下证据
+                log.warn("自动压实失败，墓碑仍在索引里，下次删除会重试", e);
+            } finally {
+                compacting.set(false);
+            }
+        });
+        return true;
     }
 
     /**
@@ -56,7 +175,12 @@ public class IndexMaintenanceService {
      * 重建 10 万点的图要一百多秒，不该被一个空操作触发。
      */
     public synchronized CompactionResult compact() {
-        int tombstones = documentStore.deletedCount();
+        // 先把「这一轮重建要排除哪些 id」拍下来。
+        // 压实不是原子的：期间还会有删除进来，清理时必须严格限定在这一批，
+        // 否则会把后来才删掉、却已经被重建进新图的文档的原文也清掉，
+        // 留下一个查不到原文的死节点。
+        java.util.Set<Integer> tombstoned = documentStore.deletedIdSnapshot();
+        int tombstones = tombstoned.size();
         int vectorsBefore = vectorIndexManager.size();
 
         if (tombstones == 0) {
@@ -84,8 +208,10 @@ public class IndexMaintenanceService {
         //    BM25 是全局统计量模型（IDF、平均长度），没法局部删词，只能重建。
         sparseIndexManager.rebuildFromDocuments();
 
-        // 3. 墓碑已经不在新图里了，这些 id 留着只剩副作用
-        int purged = documentStore.purgeDeleted();
+        // 3. 墓碑已经不在新图里了，这些 id 留着只剩副作用。
+        //    只清这一批 —— 压实期间新来的删除继续当墓碑，下次压实再处理，
+        //    它们在检索时本来就被过滤掉，不会泄漏。
+        int purged = documentStore.purgeDeleted(tombstoned);
 
         int termsAfter = sparseIndexManager.termCount();
         double averageLengthAfter = sparseIndexManager.averageDocumentLength();

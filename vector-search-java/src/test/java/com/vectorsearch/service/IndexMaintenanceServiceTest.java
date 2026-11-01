@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,12 +40,19 @@ class IndexMaintenanceServiceTest {
     }
 
     private Fixture fixture() {
+        return fixture(new VectorSearchProperties.Maintenance(true, 0.1));
+    }
+
+    private Fixture fixture(VectorSearchProperties.Maintenance maintenance) {
         // 配置用 record 的兜底默认值（维度 512、HNSW m=16 efConstruction=200）
-        VectorSearchProperties properties = new VectorSearchProperties(null, 0, null, null, null);
+        VectorSearchProperties properties =
+                new VectorSearchProperties(null, 0, null, null, null, maintenance);
         DocumentStore store = new DocumentStore(new ObjectMapper());
         VectorIndexManager vector = new VectorIndexManager(properties, store);
         SparseIndexManager sparse = new SparseIndexManager(store);
-        return new Fixture(store, vector, sparse, new IndexMaintenanceService(vector, sparse, store));
+        // 传同步 executor：自动压实当场跑完，测试才能断言压实之后的状态
+        return new Fixture(store, vector, sparse,
+                new IndexMaintenanceService(vector, sparse, store, properties, Runnable::run));
     }
 
     /** 可复现的随机向量，不归一化 —— add 会自己归一化。 */
@@ -182,5 +190,100 @@ class IndexMaintenanceServiceTest {
         ids.sort(null);
 
         assertEquals(List.of(3, 5), ids);
+    }
+
+    // ---------- 自动压实 ----------
+
+    @Test
+    void autoCompact_triggersWhenTombstoneRatioReachesThreshold() {
+        Fixture f = fixture(new VectorSearchProperties.Maintenance(true, 0.1));
+        for (int id = 1; id <= 10; id++) {
+            f.documentStore().put(id, "第 " + id + " 篇文档的正文");
+            f.vectorIndexManager().add(id, vector(id));
+        }
+        for (int id = 1; id <= 2; id++) {
+            f.documentStore().remove(id);
+        }
+        assertEquals(0.2, f.maintenance().tombstoneRatio(), 1e-9,
+                "前提：10 篇删 2 篇，墓碑占比 20%");
+
+        assertTrue(f.maintenance().maybeAutoCompact(), "20% ≥ 10%，应该触发");
+
+        assertEquals(0, f.documentStore().deletedCount(), "同步 executor 下当场就该压完");
+        assertEquals(8, f.vectorIndexManager().size());
+        assertEquals(1, f.maintenance().autoCompactions());
+    }
+
+    @Test
+    void autoCompact_skipsBelowThreshold() {
+        Fixture f = fixture(new VectorSearchProperties.Maintenance(true, 0.1));
+        for (int id = 1; id <= 20; id++) {
+            f.documentStore().put(id, "第 " + id + " 篇文档的正文");
+            f.vectorIndexManager().add(id, vector(id));
+        }
+        f.documentStore().remove(1);
+
+        assertFalse(f.maintenance().maybeAutoCompact(), "5% < 10%，不该触发");
+        assertEquals(1, f.documentStore().deletedCount(), "墓碑应该还留着");
+        assertEquals(20, f.vectorIndexManager().size(), "没压实，图里不该少东西");
+        assertEquals(0, f.maintenance().autoCompactions());
+    }
+
+    @Test
+    void autoCompact_canBeDisabled() {
+        Fixture f = fixture(new VectorSearchProperties.Maintenance(false, 0.1));
+        for (int id = 1; id <= 10; id++) {
+            f.documentStore().put(id, "第 " + id + " 篇文档的正文");
+            f.vectorIndexManager().add(id, vector(id));
+        }
+        for (int id = 1; id <= 9; id++) {
+            f.documentStore().remove(id);
+        }
+        assertEquals(0.9, f.maintenance().tombstoneRatio(), 1e-9);
+
+        assertFalse(f.maintenance().maybeAutoCompact(), "关掉之后占比再高也不触发");
+        assertEquals(9, f.documentStore().deletedCount(), "墓碑原样留着，等人工压实");
+    }
+
+    @Test
+    void autoCompact_isIdempotentWhenNothingToCompact() {
+        Fixture f = fixture(new VectorSearchProperties.Maintenance(true, 0.1));
+        f.documentStore().put(1, "唯一的一篇文档");
+        f.vectorIndexManager().add(1, vector(1));
+
+        // 没有墓碑时占比是 0，不该为了「空操作」把整张图重建一遍
+        assertFalse(f.maintenance().maybeAutoCompact());
+        assertEquals(0, f.maintenance().autoCompactions());
+    }
+
+    @Test
+    void autoCompactRatio_rejectsNonsenseValues() {
+        // 0 会让每次删除都触发重建，1 会让它永远不触发 —— 两个都很难从现象倒推
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new VectorSearchProperties.Maintenance(true, 0));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new VectorSearchProperties.Maintenance(true, 1));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new VectorSearchProperties.Maintenance(true, 1.5));
+    }
+
+    @Test
+    void purgeDeleted_onlyRemovesTheSnapshotTakenBeforeRebuild() {
+        Fixture f = fixture();
+        f.documentStore().put(1, "第一篇文档");
+        f.documentStore().put(2, "第二篇文档");
+        f.documentStore().remove(1);
+
+        // 压实开始：记下「这次重建要排除谁」
+        java.util.Set<Integer> snapshot = f.documentStore().deletedIdSnapshot();
+
+        // 重建期间又删了一篇 —— 它<b>已经</b>被重建进新图了，
+        // 原文一旦被清掉就会留下一个查不到内容的死节点
+        f.documentStore().remove(2);
+
+        assertEquals(1, f.documentStore().purgeDeleted(snapshot));
+
+        assertEquals(1, f.documentStore().totalCount(), "只该清掉快照里的那一篇");
+        assertEquals(1, f.documentStore().deletedCount(), "后来删的必须继续当墓碑");
     }
 }
