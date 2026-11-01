@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.IntPredicate;
 
 /**
  * 暴力检索：对全量向量逐个算相似度，取 top-k。
@@ -61,7 +62,7 @@ public class BruteForceIndex implements VectorIndex {
     }
 
     @Override
-    public List<SearchResult> search(float[] query, int k, int efSearch) {
+    public List<SearchResult> search(float[] query, int k, int efSearch, IntPredicate filter) {
         validate(query);
         if (k <= 0) {
             return List.of();
@@ -81,6 +82,11 @@ public class BruteForceIndex implements VectorIndex {
                     new PriorityQueue<>(Math.min(k, n), Comparator.comparingDouble(SearchResult::score));
 
             for (int i = 0; i < n; i++) {
+                // 暴力检索没有「图遍历」的概念，过滤就是简单跳过 ——
+                // 它同时也是过滤检索的 ground truth：HNSW 带过滤的结果要拿这个来算召回
+                if (filter != null && !filter.test(ids[i])) {
+                    continue;
+                }
                 float score = DistanceMetrics.dot(q, vectors[i]);
                 if (topK.size() < k) {
                     topK.offer(new SearchResult(ids[i], score));

@@ -54,6 +54,23 @@ public class DocumentStore {
     private static final Logger log = LoggerFactory.getLogger(DocumentStore.class);
 
     private final Map<Integer, String> documents = new ConcurrentHashMap<>();
+    /**
+     * 文档元数据：来源、导入时间。
+     *
+     * <p>为什么单独一张表、而不是把来源拼进原文：元数据是<b>过滤</b>的依据。
+     * 带过滤的检索要先按来源圈出候选 id，这是按 id 的哈希查表，
+     * 不能顺带把原文也读出来解析一遍 —— 那条路径在每次检索都会走。
+     */
+    private final Map<Integer, DocMeta> metadata = new ConcurrentHashMap<>();
+    /**
+     * 每个来源的存活文档数。
+     *
+     * <p>冗余维护一份计数，而不是每次去 {@code metadata} 里数 ——
+     * 选择性是每次带过滤检索都要用的输入，十万篇上现数一遍是毫秒级，
+     * 比检索本身还贵。
+     */
+    private final Map<String, java.util.concurrent.atomic.AtomicInteger> sourceCounts =
+            new ConcurrentHashMap<>();
     /** 逻辑删除标记。检索时过滤，重建索引时才真正回收。 */
     private final Set<Integer> deletedIds = ConcurrentHashMap.newKeySet();
     private final AtomicLong totalCharacters = new AtomicLong();
@@ -77,18 +94,62 @@ public class DocumentStore {
     }
 
     public void put(int id, String text) {
+        put(id, text, DocMeta.unknown());
+    }
+
+    public void put(int id, String text, DocMeta meta) {
         if (text == null) {
             return;
         }
+        DocMeta effective = meta == null ? DocMeta.unknown() : meta;
         String previous = documents.put(id, text);
+        // 先看它原来是不是「活着」的，决定要不要从旧来源里扣掉
+        boolean wasLive = previous != null && !deletedIds.remove(id);
+        DocMeta previousMeta = metadata.put(id, effective);
+
         if (previous != null) {
             totalCharacters.addAndGet(-previous.length());
+            if (wasLive && previousMeta != null) {
+                adjustSourceCount(previousMeta.source(), -1);
+            }
         }
         totalCharacters.addAndGet(text.length());
-        // 重新导入同一个 id 视为「撤销删除」
-        deletedIds.remove(id);
+        adjustSourceCount(effective.source(), 1);
+
         // 让 id 序列永远领先于已有的最大 id（恢复快照后也能正确续号）
         idSequence.accumulateAndGet(id, Math::max);
+    }
+
+    /** 元数据（来源、导入时间）。未知时返回占位值，不返回 null。 */
+    public DocMeta metadataOf(int id) {
+        return metadata.getOrDefault(id, DocMeta.unknown());
+    }
+
+    public String sourceOf(int id) {
+        return metadataOf(id).source();
+    }
+
+    /**
+     * 各来源的<b>存活</b>文档数，按来源名排序。
+     *
+     * <p>维护成计数器而不是每次遍历：过滤检索要靠它算选择性
+     * （匹配文档数 / 总数），那条路径在每次检索都会走 ——
+     * 十万篇的库上现数一遍是毫秒级开销，比检索本身还贵。
+     */
+    public Map<String, Integer> sourceCounts() {
+        Map<String, Integer> counts = new java.util.TreeMap<>();
+        for (Map.Entry<String, java.util.concurrent.atomic.AtomicInteger> entry : sourceCounts.entrySet()) {
+            int value = entry.getValue().get();
+            if (value > 0) {
+                counts.put(entry.getKey(), value);
+            }
+        }
+        return counts;
+    }
+
+    private void adjustSourceCount(String source, int delta) {
+        sourceCounts.computeIfAbsent(source, key -> new java.util.concurrent.atomic.AtomicInteger())
+                .addAndGet(delta);
     }
 
     /** 取原文。已删除的文档对调用方不可见。 */
@@ -117,6 +178,7 @@ public class DocumentStore {
         if (text != null) {
             totalCharacters.addAndGet(-text.length());
         }
+        adjustSourceCount(sourceOf(id), -1);
         return true;
     }
 
@@ -157,6 +219,8 @@ public class DocumentStore {
             if (documents.remove(id) != null) {
                 purged++;
             }
+            // 来源计数同理，remove() 时已经减过，这里只清元数据本身
+            metadata.remove(id);
         }
         deletedIds.clear();
         return purged;
@@ -189,7 +253,7 @@ public class DocumentStore {
         List<DocumentView> items = new ArrayList<>(to - from);
         for (int i = from; i < to; i++) {
             int id = ids.get(i);
-            items.add(new DocumentView(id, documents.get(id)));
+            items.add(new DocumentView(id, documents.get(id), sourceOf(id)));
         }
         return new Page(ids.size(), from, limit, items);
     }
@@ -215,6 +279,8 @@ public class DocumentStore {
 
     public void clear() {
         documents.clear();
+        metadata.clear();
+        sourceCounts.clear();
         deletedIds.clear();
         totalCharacters.set(0);
         idSequence.set(0);
@@ -238,8 +304,10 @@ public class DocumentStore {
 
         try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
             for (Map.Entry<Integer, String> entry : documents.entrySet()) {
+                DocMeta meta = metadataOf(entry.getKey());
                 writer.write(objectMapper.writeValueAsString(new DocumentRecord(
-                        entry.getKey(), entry.getValue(), deletedIds.contains(entry.getKey()))));
+                        entry.getKey(), entry.getValue(), deletedIds.contains(entry.getKey()),
+                        meta.source(), meta.importedAt())));
                 writer.write('\n');
             }
         }
@@ -279,7 +347,8 @@ public class DocumentStore {
                 }
                 try {
                     DocumentRecord record = objectMapper.readValue(line, DocumentRecord.class);
-                    put(record.id(), record.text());
+                    // 老格式没有 source/importedAt 字段，Jackson 会给 null/0 —— DocMeta.of 负责兜底
+                    put(record.id(), record.text(), DocMeta.of(record.source(), record.importedAt()));
                     if (record.deleted()) {
                         remove(record.id());
                     }
@@ -296,12 +365,33 @@ public class DocumentStore {
         return loaded;
     }
 
-    /** JSONL 里的一行。字段名即序列化后的键名。 */
-    record DocumentRecord(int id, String text, boolean deleted) {
+    /** JSONL 里的一行。字段名即序列化后的键名。后加的两个字段在老文件里是 null/0。 */
+    record DocumentRecord(int id, String text, boolean deleted, String source, long importedAt) {
     }
 
     /** 列表里的一项。 */
-    public record DocumentView(int id, String text) {
+    public record DocumentView(int id, String text, String source) {
+    }
+
+    /**
+     * 文档元数据。
+     *
+     * @param source     来源（上传时的文件名），空则记成 {@code 未标注}
+     * @param importedAt 写入时间戳（毫秒），0 表示未知（老格式文件）
+     */
+    public record DocMeta(String source, long importedAt) {
+
+        /** 来源未知时的占位值。过滤按来源圈候选集时，它也是一个合法来源。 */
+        public static final String UNKNOWN_SOURCE = "未标注";
+
+        public static DocMeta unknown() {
+            return new DocMeta(UNKNOWN_SOURCE, 0L);
+        }
+
+        public static DocMeta of(String source, long importedAt) {
+            String normalized = source == null || source.isBlank() ? UNKNOWN_SOURCE : source.trim();
+            return new DocMeta(normalized, importedAt);
+        }
     }
 
     /** 一页结果。 */

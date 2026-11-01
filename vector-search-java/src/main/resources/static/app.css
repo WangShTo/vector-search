@@ -143,6 +143,7 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; }
   background: var(--panel-2); border: 1px solid var(--line); color: var(--ink-dim);
   border-radius: 7px; padding: 6px 13px; font-size: 12.5px; cursor: pointer;
   font-family: var(--mono); transition: all .13s; user-select: none;
+  white-space: nowrap; flex: none;
 }
 .chip:hover { border-color: #38415a; color: var(--ink); }
 .chip[data-active="1"] { color: #0d1017; font-weight: 650; border-color: transparent; }
@@ -151,6 +152,9 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; }
 .chip[data-mode="hybrid"][data-active="1"] { background: var(--hybrid); }
 .chip[data-toggle="rerank"][data-active="1"] { background: var(--violet); }
 .chip[data-toggle="compare"][data-active="1"] { background: var(--ink); }
+/* 来源按钮没有 data-mode，得单独给选中态一个底色，
+   否则会继承上面那条「深色文字」，在深色面板上等于看不见 */
+.chip[data-source][data-active="1"] { background: var(--ink); }
 
 .hint { color: var(--ink-faint); font-size: 11.5px; }
 .panel {
@@ -170,8 +174,8 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; }
 .search-box .btn.primary { padding: 0 24px; }
 
 .controls { display: flex; gap: 20px; margin-top: 15px; flex-wrap: wrap; align-items: center; }
-.group { display: flex; align-items: center; gap: 8px; }
-.group-label { font-size: 12px; color: var(--ink-faint); }
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.group-label { font-size: 12px; color: var(--ink-faint); white-space: nowrap; flex: none; }
 
 .examples { display: flex; gap: 7px; margin-top: 15px; flex-wrap: wrap; align-items: center; }
 .example {
@@ -265,6 +269,10 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .doc-meta { font-size: 11px; color: var(--ink-faint); font-family: var(--mono); margin-top: 5px; }
+.doc-meta .src {
+  color: var(--ink-dim); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 4px; padding: 1px 5px;
+}
 .doc-actions { display: flex; gap: 6px; flex: none; }
 
 .pager { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 16px; }

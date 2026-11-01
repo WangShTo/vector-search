@@ -44,7 +44,16 @@ public record SearchRequest(
          * 精度明显高于向量内积，但要对每个候选跑一次前向计算 ——
          * 是数量级的延迟代价，所以默认不开启。
          */
-        Boolean rerank
+        Boolean rerank,
+
+        /**
+         * 只在这个来源里检索（上传时的文件名）。不传表示全库。
+         *
+         * <p>这是<b>带过滤的检索</b>，不是「搜完再筛」：过滤条件会下推到图遍历里。
+         * 两者的差别在低选择性下是数量级的 —— 只占 1% 的来源，搜完再筛 recall 接近 0，
+         * 下推之后仍然能到 0.94。实测见 {@code bench/REPORT.md} 第八节。
+         */
+        String source
 ) {
 
     public int topKOrDefault() {

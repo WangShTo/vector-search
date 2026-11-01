@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.IntPredicate;
 
 /**
  * HNSW（Hierarchical Navigable Small World）近似最近邻索引 —— 从零实现。
@@ -513,6 +514,11 @@ public class HnswIndex implements VectorIndex {
 
     @Override
     public List<SearchResult> search(float[] query, int k, int efSearch) {
+        return search(query, k, efSearch, null);
+    }
+
+    @Override
+    public List<SearchResult> search(float[] query, int k, int efSearch, IntPredicate filter) {
         validate(query);
         if (k <= 0) {
             return List.of();
@@ -531,7 +537,10 @@ public class HnswIndex implements VectorIndex {
             int current = entryPoint;
             float currentSim = similarity(normalized, 0, current);
 
-            // 上层：ef=1 的贪心下降，只找方向
+            // 上层：ef=1 的贪心下降，只找方向。
+            // 注意这里**不应用过滤**：上层只负责把落点带到目标区域，
+            // 不产出结果。如果上层也按 filter 跳过节点，很可能在稀疏的上层
+            // 直接断掉，落点反而更差 —— 这也是过滤器必须下沉到第 0 层的原因。
             for (int l = maxLevel; l > 0; l--) {
                 current = greedyDescend(normalized, 0, current, currentSim, l);
                 currentSim = similarity(normalized, 0, current);
@@ -539,7 +548,7 @@ public class HnswIndex implements VectorIndex {
 
             // 第 0 层：用 efSearch 的候选池做真正的收敛
             int ef = Math.max(efSearch, k);
-            List<SearchResult> candidates = searchLayer(normalized, 0, current, ef, 0);
+            List<SearchResult> candidates = searchLayer(normalized, 0, current, ef, 0, filter);
 
             int take = Math.min(k, candidates.size());
             List<SearchResult> result = new ArrayList<>(take);
@@ -569,6 +578,11 @@ public class HnswIndex implements VectorIndex {
      */
     private List<SearchResult> searchLayer(float[] query, int queryOffset,
                                            int entry, int ef, int layer) {
+        return searchLayer(query, queryOffset, entry, ef, layer, null);
+    }
+
+    private List<SearchResult> searchLayer(float[] query, int queryOffset,
+                                           int entry, int ef, int layer, IntPredicate filter) {
         // 线程本地的访问标记：容量跟着索引容量走，索引扩容后重建一次。
         // 把数组引用存进局部变量，避免循环里反复走 ThreadLocal。
         VisitedScratch scratch = visitedScratch.get();
@@ -584,16 +598,36 @@ public class HnswIndex implements VectorIndex {
         PriorityQueue<SearchResult> result =
                 new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score));
 
+        // 停止判据用的「前沿堆」：保存已评估节点里最好的 ef 个，堆顶是其中<b>最差</b>的。
+        //
+        // 不过滤时它和 result 是同一个东西（行为与原来完全一致）；
+        // 一旦加了过滤就必须分开：result 只收匹配节点，在高选择性下会非常稀疏，
+        // 拿它当停止线会让遍历在找到几条匹配之后就集体停下 —— 实测 1% 选择性下
+        // 把 efSearch 从 50 加到 1000，recall 一直卡在 0.713 不动，就是这个原因。
+        // 停止线必须衡量「我探索到多远」，而不是「我收集到几条」。
+        boolean filtering = filter != null;
+        PriorityQueue<SearchResult> frontier = filtering
+                ? new PriorityQueue<>(Comparator.comparingDouble(SearchResult::score))
+                : result;
+
         SearchResult start = new SearchResult(entry, similarity(query, queryOffset, entry));
         visited[entry] = token;
+        // 入口点永远参与扩展（哪怕它不匹配），否则高选择性过滤下可能一步都走不出去
         candidates.offer(start);
-        result.offer(start);
+        if (!filtering) {
+            result.offer(start);
+        } else {
+            frontier.offer(start);
+            if (accepts(filter, entry)) {
+                result.offer(start);
+            }
+        }
 
         while (!candidates.isEmpty()) {
             SearchResult nearest = candidates.poll();
-            SearchResult worstKept = result.peek();
+            SearchResult bound = frontier.peek();
 
-            if (worstKept != null && nearest.score() < worstKept.score()) {
+            if (bound != null && nearest.score() < bound.score()) {
                 break;
             }
 
@@ -607,13 +641,21 @@ public class HnswIndex implements VectorIndex {
 
                 float sim = similarity(query, queryOffset, neighbor);
                 SearchResult candidate = new SearchResult(neighbor, sim);
-                SearchResult currentWorst = result.peek();
+                SearchResult currentBound = frontier.peek();
 
-                if (result.size() < ef || currentWorst == null || sim > currentWorst.score()) {
+                if (frontier.size() < ef || currentBound == null || sim > currentBound.score()) {
                     candidates.offer(candidate);
-                    result.offer(candidate);
-                    if (result.size() > ef) {
-                        result.poll();
+                    frontier.offer(candidate);
+                    if (frontier.size() > ef) {
+                        frontier.poll();
+                    }
+                    // 导航与结果分开：前沿堆收下所有节点（图要能走下去），
+                    // 结果堆只收匹配的（返回给用户的必须满足过滤条件）。
+                    if (filtering && accepts(filter, neighbor)) {
+                        result.offer(candidate);
+                        if (result.size() > ef) {
+                            result.poll();
+                        }
                     }
                 }
             }
@@ -622,6 +664,11 @@ public class HnswIndex implements VectorIndex {
         List<SearchResult> sorted = new ArrayList<>(result);
         sorted.sort(Comparator.comparingDouble(SearchResult::score).reversed());
         return sorted;
+    }
+
+    /** 过滤判定。内部节点号要先换成业务 id —— 过滤条件是用户按业务字段写的。 */
+    private boolean accepts(IntPredicate filter, int node) {
+        return filter == null || filter.test(externalIdStore[node]);
     }
 
     // =====================================================================

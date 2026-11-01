@@ -125,7 +125,7 @@
 
   /* ---------------- 检索页 ---------------- */
 
-  var S = { mode: "hybrid", rerank: false, compare: false, busy: false };
+  var S = { mode: "hybrid", rerank: false, compare: false, busy: false, source: "" };
 
   function renderSearch() {
     titleEl.textContent = "检索";
@@ -157,6 +157,12 @@
             '<span class="chip" data-toggle="compare"' + (S.compare ? ' data-active="1"' : "") + ">三路对比</span>" +
           "</div>" +
           '<span class="hint" id="modeHint">' + esc(MODE_DESC[S.mode]) + "</span>" +
+        "</div>" +
+        '<div class="controls" id="sourceRow">' +
+          '<div class="group"><span class="group-label">来源</span>' +
+            '<span class="chip" data-source="" data-active="1">全部</span>' +
+          "</div>" +
+          '<span class="hint" id="sourceHint">按来源过滤会把条件下推到图遍历里</span>' +
         "</div>" +
         '<div class="examples">' +
           '<span class="hint">试试</span>' +
@@ -190,6 +196,41 @@
         S[name] = !S[name];
         c.dataset.active = S[name] ? "1" : "0";
       });
+    });
+
+    // 来源筛选：来源是动态的（取决于导入了哪些文件），所以从后端取
+    api("/api/documents/sources").then(function (counts) {
+      counts = counts || {};
+      var names = Object.keys(counts);
+      var row = $("sourceRow");
+      if (!row) return;
+      if (names.length <= 1) {
+        // 只有一种来源时筛不筛都一样，这一行没有存在意义
+        row.style.display = "none";
+        return;
+      }
+      var group = row.querySelector(".group");
+      names.forEach(function (name) {
+        var chip = document.createElement("span");
+        chip.className = "chip";
+        chip.dataset.source = name;
+        chip.textContent = name + " (" + counts[name] + ")";
+        chip.addEventListener("click", function () {
+          S.source = chip.dataset.source;
+          group.querySelectorAll(".chip").forEach(function (x) {
+            x.dataset.active = x.dataset.source === S.source ? "1" : "0";
+          });
+          // 说清这一下发生了什么：不是「搜完再筛」，而是把条件下推进图遍历
+          $("sourceHint").textContent = S.source
+            ? "只在「" + S.source + "」里检索（" + counts[S.source] + " 篇 / 共 " +
+              Object.values(counts).reduce(function (a, b) { return a + b; }, 0) +
+              " 篇），搜索范围之外的候选不会占用名额"
+            : "按来源过滤会把条件下推到图遍历里";
+        });
+        group.appendChild(chip);
+      });
+    }).catch(function () {
+      // 拿不到来源就保持「全部」，不影响检索本身
     });
 
     viewEl.querySelectorAll(".example").forEach(function (b) {
@@ -338,12 +379,12 @@
     try {
       if (S.compare) {
         var results = await Promise.all(MODES.map(function (m) {
-          return api("/api/search", { body: { query: q, topK: 8, mode: m, rerank: S.rerank } });
+          return api("/api/search", { body: { query: q, topK: 8, mode: m, rerank: S.rerank, source: S.source || null } });
         }));
         renderCompareResult(results);
       } else {
         var resp = await api("/api/search", {
-          body: { query: q, topK: 10, mode: S.mode, rerank: S.rerank }
+          body: { query: q, topK: 10, mode: S.mode, rerank: S.rerank, source: S.source || null }
         });
         renderSingleResult(resp);
       }
@@ -477,7 +518,9 @@
         '<div class="doc-id">#' + d.id + "</div>" +
         '<div class="doc-body">' +
           '<div class="doc-text">' + esc(d.text) + "</div>" +
-          '<div class="doc-meta">' + fmtNum((d.text || "").length) + " 字符</div>" +
+          '<div class="doc-meta">' +
+            (d.source ? '<span class="src">' + esc(d.source) + "</span> · " : "") +
+            fmtNum((d.text || "").length) + " 字符</div>" +
         "</div>" +
         '<div class="doc-actions">' +
           '<button class="btn small danger" data-del="' + d.id + '">删除</button>' +

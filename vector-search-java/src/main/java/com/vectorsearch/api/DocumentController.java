@@ -72,12 +72,24 @@ public class DocumentController {
         return documentStore.list(offset, Math.min(Math.max(limit, 1), 200), q);
     }
 
+    /**
+     * 各来源的<b>存活</b>文档数。
+     *
+     * <p>前端拿它填「来源」下拉框，用户才知道「只在一个文件里搜」到底圈住了多少篇；
+     * 后端拿它算选择性 —— 选择性决定过滤检索要把 ef 放大多少倍。
+     */
+    @GetMapping("/sources")
+    public java.util.Map<String, Integer> sources() {
+        return documentStore.sourceCounts();
+    }
+
     /** 查看单篇原文。 */
     @GetMapping("/{id}")
     public ResponseEntity<DocumentDetail> get(@PathVariable int id) {
         return documentStore.get(id)
                 .map(text -> ResponseEntity.ok(new DocumentDetail(
-                        id, text, text.length(), documentStore.isDeleted(id))))
+                        id, text, text.length(), documentStore.isDeleted(id),
+                        documentStore.sourceOf(id))))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -140,7 +152,8 @@ public class DocumentController {
             requests.add(new IndexDocumentRequest(id, chunk));
         }
 
-        searchService.index(requests);
+        searchService.index(requests,
+                DocumentStore.DocMeta.of(file.getOriginalFilename(), System.currentTimeMillis()));
         persistQuietly("上传");
         log.info("已导入 {}: {} 个字符 -> {} 个分块 (id {}..{})",
                 file.getOriginalFilename(), text.length(), chunks.size(), firstId, lastId);
@@ -201,7 +214,7 @@ public class DocumentController {
     }
 
     /** 单篇文档详情。 */
-    public record DocumentDetail(int id, String text, int length, boolean deleted) {
+    public record DocumentDetail(int id, String text, int length, boolean deleted, String source) {
     }
 
     /** 删除/清空的结果。 */

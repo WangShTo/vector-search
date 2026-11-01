@@ -1,6 +1,7 @@
 package com.vectorsearch.core;
 
 import java.util.List;
+import java.util.function.IntPredicate;
 
 /**
  * 向量索引的统一抽象。
@@ -26,7 +27,7 @@ public interface VectorIndex {
     void add(int id, float[] vector);
 
     /**
-     * 检索 top-k。
+     * 检索 top-k（不带过滤）。
      *
      * @param query    查询向量，长度必须等于 {@link #dimension()}
      * @param k        返回条数
@@ -34,7 +35,26 @@ public interface VectorIndex {
      *                 这是 recall / 延迟 的头号旋钮。
      * @return 按相似度降序排列的结果，长度不超过 min(k, size())
      */
-    List<SearchResult> search(float[] query, int k, int efSearch);
+    default List<SearchResult> search(float[] query, int k, int efSearch) {
+        return search(query, k, efSearch, null);
+    }
+
+    /**
+     * 带过滤的检索。
+     *
+     * <p><b>过滤为什么不是一个「搜完再筛掉」的 if</b>：那样被筛掉的名额不会补回来 ——
+     * 过滤越狠，返回条数越少，直到一条都不剩。正确做法是让不匹配的节点
+     * <b>继续参与图的遍历</b>（它们仍然是通往匹配节点的路），只是<b>不进入结果集</b>。
+     * 这两个角色必须分开 —— 这就是把 filter 下沉到索引层、而不是留在服务层的原因。
+     *
+     * @param query    查询向量
+     * @param k        返回条数
+     * @param efSearch 候选池大小
+     * @param filter   按<b>业务 id</b> 判断是否允许进入结果；{@code null} 表示不过滤。
+     *                 不匹配的节点仍会被访问并扩展邻居（否则图会断裂）
+     * @return 按相似度降序、且全部满足 filter 的结果
+     */
+    List<SearchResult> search(float[] query, int k, int efSearch, IntPredicate filter);
 
     /** 已索引的向量条数。 */
     int size();

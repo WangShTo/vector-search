@@ -84,6 +84,12 @@ public class SearchService {
                 ? request.rerank()
                 : properties.search().rerankDefault();
 
+        // 来源过滤：把「只在这个文件里找」变成索引能理解的谓词
+        java.util.function.IntPredicate filter = sourceFilter(request.source());
+        double selectivity = selectivity(request.source());
+        // 过滤会把候选池里的名额筛掉且不补回来，所以 ef 要按选择性放大
+        int efEffective = effectiveEf(efSearch, pool, selectivity);
+
         List<SearchResult> denseHits = null;
         List<SearchResult> sparseHits = null;
 
@@ -98,10 +104,25 @@ public class SearchService {
         if (needDense) {
             float[][] embedded = modelServiceClient.embed(List.of(request.query()));
             embeddingEndsAt = System.nanoTime();
-            denseHits = indexManager.search(embedded[0], pool, efSearch);
+            // 谓词按 externalId 判，索引不知道原文里哪些 id 已被逻辑删除；
+            // 这两件事是正交的，删除过滤仍在下面统一做
+            denseHits = indexManager.search(embedded[0], pool, efEffective, filter);
         }
         if (needSparse) {
-            sparseHits = sparseIndexManager.search(request.query(), pool);
+            // BM25 走的是倒排表，没有「图」可按选择性放大 ef，只能多取再筛。
+            // 它的单次开销本来就在亚毫秒级，多取一些是划算的。
+            int sparsePool = filter == null ? pool : sparsePool(pool, selectivity);
+            List<SearchResult> raw = sparseIndexManager.search(request.query(), sparsePool);
+            if (filter == null) {
+                sparseHits = raw;
+            } else {
+                sparseHits = new ArrayList<>(raw.size());
+                for (SearchResult hit : raw) {
+                    if (filter.test(hit.id())) {
+                        sparseHits.add(hit);
+                    }
+                }
+            }
         }
         long searchStart = needDense ? embeddingEndsAt : start;
 
@@ -203,6 +224,71 @@ public class SearchService {
         return fused.size() > topK ? new ArrayList<>(fused.subList(0, topK)) : fused;
     }
 
+    /** 过滤检索允许的最大 ef。再大就接近全图扫描了，不如换策略。 */
+    private static final int MAX_EFFECTIVE_EF = 4096;
+
+    /**
+     * 把「来源」变成按 id 判的谓词。
+     *
+     * <p>为什么来源不塞进索引：索引只管向量和 id，来源是业务属性。
+     * 让索引通过谓词来问「这个 id 合不合格」，职责就分清了 ——
+     * 明天要按时间、按标签过滤，索引一行都不用改。
+     */
+    private java.util.function.IntPredicate sourceFilter(String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        String wanted = source.trim();
+        return id -> wanted.equals(documentStore.sourceOf(id));
+    }
+
+    /**
+     * 来源的选择性 = 匹配文档数 / 存活文档数。
+     *
+     * <p>不过滤时返回 1。来源不存在时返回一个极小的正数 ——
+     * 反正匹配不到东西，多遍历一些也无所谓，但别让它除零。
+     */
+    private double selectivity(String source) {
+        if (source == null || source.isBlank()) {
+            return 1.0;
+        }
+        int total = documentStore.count();
+        if (total <= 0) {
+            return 1.0;
+        }
+        Integer matching = documentStore.sourceCounts().get(source.trim());
+        if (matching == null || matching <= 0) {
+            return 1.0 / total;
+        }
+        return Math.min(1.0, (double) matching / total);
+    }
+
+    /**
+     * 带过滤的检索该用多大 ef。
+     *
+     * <p>结论来自实测（{@code bench/REPORT.md} 第八节）：过滤会把候选池里的名额
+     * 筛掉而<b>不补回来</b>。1% 选择性下 ef=50 平均只回 0.7 条、recall 0.07；
+     * 把 ef 放大到 k/选择性 —— 即「保证池子里大约有 k 个合格候选」——
+     * recall 回到 0.94，而且比「不过滤、只放大返回池」更快。
+     */
+    private int effectiveEf(int baseEf, int k, double selectivity) {
+        if (selectivity >= 1.0) {
+            return baseEf;
+        }
+        double needed = Math.ceil(k / Math.max(selectivity, 1e-6));
+        return (int) Math.min(Math.max(baseEf, needed), MAX_EFFECTIVE_EF);
+    }
+
+    /**
+     * BM25 没有 ef 可放大 —— 倒排表是按词直接查的，不存在「遍历深度」这个旋钮，
+     * 只能多取一些再筛。它的单次开销在亚毫秒级，多取是划算的。
+     */
+    private int sparsePool(int pool, double selectivity) {
+        double needed = Math.ceil(pool / Math.max(selectivity, 1e-6));
+        int capped = (int) Math.min(needed, 2000);
+        return Math.max(pool, capped);
+    }
+
     private SearchResponse respond(String query,
                                    String mode,
                                    boolean reranked,
@@ -239,6 +325,16 @@ public class SearchService {
      * <p>同时写入两路索引：稠密向量进 HNSW，原文进 BM25 倒排表。
      */
     public IndexResult index(List<IndexDocumentRequest> documents) {
+        return index(documents, DocumentStore.DocMeta.unknown());
+    }
+
+    /**
+     * 批量写入，并给这一批文档打上同样的元数据。
+     *
+     * <p>一批文档来自同一次上传，所以共用一份来源信息 —— 切块会让一篇文件
+     * 变成很多条记录，但它们的来源是同一个文件名。
+     */
+    public IndexResult index(List<IndexDocumentRequest> documents, DocumentStore.DocMeta meta) {
         long start = System.nanoTime();
 
         List<String> texts = new ArrayList<>(documents.size());
@@ -251,7 +347,7 @@ public class SearchService {
 
         for (int i = 0; i < documents.size(); i++) {
             IndexDocumentRequest document = documents.get(i);
-            documentStore.put(document.id(), document.text());
+            documentStore.put(document.id(), document.text(), meta);
             indexManager.add(document.id(), vectors[i]);
             sparseIndexManager.add(document.id(), document.text());
         }
