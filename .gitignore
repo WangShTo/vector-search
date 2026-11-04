@@ -54,6 +54,10 @@ bench/results/*
 !bench/results/concurrent-optimized.json
 # 量化对比要跑两次 10 万点建图（f32 68s + sq8 168s），本机复跑成本不低，数据一并提交
 !bench/results/quantization.json
+# 绑核并发数据：报告第四节的两张表完全由这两个文件生成，不提交等于数字没有来源。
+# 跑一轮要十几分钟（每档 8 次测量 × 两种规模），也没必要复跑。
+!bench/results/concurrent-pinned.json
+!bench/results/concurrent-pinned-5k.json
 eval/results/
 
 # 服务运行日志（dev.ps1 产生）
