@@ -22,6 +22,8 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
+import statistics
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -356,31 +358,52 @@ def section_recall(recall: dict) -> str:
     return "\n".join(lines)
 
 
-def parse_concurrency(raw: list[dict]) -> dict:
-    """把 JMH 的 searchWith{N}Threads 结果解析成 {线程数: 吞吐}。"""
-    out: dict = {}
-    for entry in raw:
-        name = entry["benchmark"].rsplit("searchWith", 1)[1]
-        threads = int(name.replace("Threads", "").replace("Thread", ""))
-        out[threads] = entry["primaryMetric"]["score"]
+def _iteration_stdev(entry) -> float:
+    """JMH 的 scoreError 是 99.9% 置信区间半宽，不直观；标准差自己从 rawData 算。"""
+    raw = entry["primaryMetric"].get("rawData") or []
+    flat = [v for iteration in raw for v in iteration]
+    return statistics.stdev(flat) if len(flat) > 1 else 0.0
+
+
+def parse_pinned_concurrency(raw) -> dict:
+    """{线程数: (吞吐, 标准差)}，来自 scripts/bench_concurrency_pinned.ps1 的 JMH JSON。"""
+    out = {}
+    for entry in raw or []:
+        m = re.search(r"searchWith(\d+)Threads?$", entry["benchmark"])
+        if m:
+            out[int(m.group(1))] = (entry["primaryMetric"]["score"], _iteration_stdev(entry))
     return out
 
 
 def section_concurrency(results_dir: Path) -> str:
-    """并发扩展性 —— 并如实说明这台机器测不准。"""
-    baseline_raw = load_json(results_dir / "concurrent-baseline.json")
-    optimized_raw = load_json(results_dir / "concurrent-optimized.json")
-    if not baseline_raw and not optimized_raw:
+    """并发扩展性 —— 绑核之后的数据才可信。"""
+    big = parse_pinned_concurrency(load_json(results_dir / "concurrent-pinned.json"))
+    small = parse_pinned_concurrency(load_json(results_dir / "concurrent-pinned-5k.json"))
+    if not big and not small:
         return ""
 
-    baseline = parse_concurrency(baseline_raw) if baseline_raw else {}
-    optimized = parse_concurrency(optimized_raw) if optimized_raw else {}
-    threads = sorted(set(baseline) | set(optimized))
-    if not threads:
-        return ""
+    def table(parsed: dict, title: str) -> list:
+        if not parsed:
+            return []
+        base = parsed.get(1, (0.0, 0.0))[0]
+        out = [
+            f"**{title}**",
+            "",
+            "| 线程 | 吞吐 ops/s | 扩展效率 | 每线程单次延迟 |",
+            "|---|---|---|---|",
+        ]
+        for t in sorted(parsed):
+            score, sd = parsed[t]
+            eff = f"{score / (base * t):.2f}" if base else "—"
+            latency = f"{t * 1e6 / score:,.1f} µs" if score else "—"
+            out.append(f"| {t} | {score:,.0f} ± {sd:,.0f} | {eff} | {latency} |")
+        out.append("")
+        return out
 
-    b1 = baseline.get(1)
-    o1 = optimized.get(1)
+    def eff(parsed: dict) -> str:
+        if 1 in parsed and 8 in parsed:
+            return f"{parsed[8][0] / (parsed[1][0] * 8):.2f}"
+        return "—"
 
     lines = [
         "## 四、并发扩展性",
@@ -391,49 +414,53 @@ def section_concurrency(results_dir: Path) -> str:
         "扩展效率 = 实际吞吐(T 线程) / (T × 吞吐(1 线程))",
         "```",
         "",
-        "理想值 1.0。明显低于 1 说明存在争用 —— 线程越多，花在等待上的时间越多。",
+        "理想值 1.0。明显低于 1 说明线程之间在抢东西。",
         "",
-        "| 线程 | 基线 ops/s | 线程本地后 ops/s | 基线扩展效率 | 优化后扩展效率 |",
-        "|---|---|---|---|---|",
+        "所有数字都**绑核**测量（`scripts/bench_concurrency_pinned.ps1`，把 JMH 主进程和它 fork 的",
+        "worker 一起钉在逻辑核 0-7，即 8 个 P 核主线程），每档 8 次测量。",
+        "",
     ]
-
-    for t in threads:
-        bs = baseline.get(t)
-        os_ = optimized.get(t)
-        b_cell = f"{bs:,.0f}" if bs else "—"
-        o_cell = f"{os_:,.0f}" if os_ else "—"
-        be = f"{bs / (b1 * t):.2f}" if bs and b1 else "—"
-        oe = f"{os_ / (o1 * t):.2f}" if os_ and o1 else "—"
-        lines.append(f"| {t} | {b_cell} | {o_cell} | {be} | {oe} |")
+    lines += table(big, "2 万条（向量占 41 MB，超出 30 MB 的 L3）")
+    lines += table(small, "5000 条（向量占 10 MB，整个装进 L3）")
 
     lines += [
+        "两个信息：",
         "",
-        "### ⚠️ 这份并发数据不可用于下结论",
+        "1. **索引变小，吞吐翻倍**。检索要遍历的节点数随总量下降，"
+        "加上整个工作集进了 L3，这是可以预期的。",
+        f"2. **8 线程的扩展效率在两个规模上几乎一样**（{eff(big)} vs {eff(small)}）。"
+        "这一点很重要：如果瓶颈是内存带宽，10 MB 全部命中 L3 的那组应该明显更好看。"
+        "它没有 —— **所以扩展效率掉下来不是因为内存带宽**。",
         "",
-        "必须说清楚：**这台机器测不出可信的并发数字**。",
+        "### 扩展效率是怎么来的：排除了什么，还没排除什么",
         "",
-        "同一个 8 线程配置，在不同轮次里跑出过 20k、28k、35k、42k、82k ops/s ——",
-        "**跨轮次波动达到 4 倍**，完全掩盖了被测改动本身的效果。",
-        "",
-        "原因是可以定位的：",
-        "",
-        "| 干扰源 | 具体情况 |",
+        "| 候选原因 | 结论 |",
         "|---|---|",
-        "| 大小核混合架构 | i7-14650HX 是 8 P 核 + 8 E 核。线程数超过 8 后，调度器会把线程放到 E 核上，而 E 核性能只有 P 核的一半左右，于是「加线程」变成了「换更慢的核」 |",
-        "| 后台负载 | 测量期间机器常驻 27% 左右的 CPU 占用，可用内存一度只剩 1.8 GB / 15.8 GB |",
-        "| 样本量不足 | 每轮只有 5 × 2 秒的测量窗口，对毫秒级操作来说统计量偏少 |",
+        "| 内存带宽 / 缓存未命中 | **已排除**：工作集装进 L3 后效率没有改善 |",
+        "| 读写锁的非争用开销 | **量级不够**：实测 16 ns，只占一次检索（104 µs）的 0.015% |",
+        "| 全核睿频低于单核睿频 | **未测量**。这是笔记本，8 核满载的功率预算明显低于单核，"
+        "但本报告没有采频率数据，不能拿它当解释 |",
+        "| 分配与 GC（每次检索要建堆、建结果数组） | **未测量** |",
+        "| 读锁在争用下的表现 | **未测量**。非争用 16 ns 不代表 8 个核同时抢同一个计数器也便宜 |",
         "",
-        "所以表格里的数字只能当**趋势参考**，不能写进简历，也不能用来证明某个优化有效。",
+        "所以能写进结论的只有一句：**8 线程扩展效率 "
+        f"{eff(big)}（2 万条）/ {eff(small)}（5000 条），成因已排除内存带宽，"
+        "尚未定位到单一因素**。这比「线性扩展」诚实，也说明这个数字背后还有活要干。",
         "",
-        "### 要得到可信的并发结论，需要什么",
+        "### 为什么以前测不出来",
         "",
-        "- **独占机器**：测量期间不跑其他程序，关掉浏览器与后台任务",
-        "- **绑核**：把基准线程固定在 P 核上，避开 E 核调度带来的异构性",
-        "- **多次取最优**：环境噪声只会让结果变慢，所以多轮中的最好成绩最接近真实能力",
-        "- **更长的测量窗口**：单轮 ≥ 10 秒，并提高 fork 数做跨 JVM 平均",
+        "同一个 8 线程配置，早期在不同轮次里跑出过 20k、28k、35k、42k、82k ops/s —— **跨轮次 4 倍**。",
+        "原因是这台机器是 i7-14650HX（8 P 核 + 8 E 核），不绑核时线程会被调度到 E 核上。",
+        "实测同一份工作：P 核 17.62 ms，E 核 31.83 ms，**E 核慢 1.81 倍**。",
+        "再叠加后台负载和过短的测量窗口，噪声就盖过了信号。",
         "",
-        "这条结论本身比数字有价值：**并发性能不是「跑一下 JMH」就能拿到的**，",
-        "它比单线程基准脆弱得多，对测量环境的要求也高得多。",
+        "绑核 + 每档 8 次测量之后，标准差压到 **1.5%-6.4%**，数字才变得可用。",
+        "",
+        "### 这条经验值钱在哪",
+        "",
+        "**并发性能不是「跑一下 JMH」就能拿到的。** 它比单线程基准脆弱得多：",
+        "大小核、后台进程、测量窗口长度，任何一项没控制住，结论就会反过来。",
+        "先让测量可信，再谈优化 —— 否则优化的只是噪声。",
         "",
     ]
     return "\n".join(lines)

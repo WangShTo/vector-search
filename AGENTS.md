@@ -12,10 +12,10 @@
 
 | 路径 | 是什么 |
 |---|---|
-| `vector-search-java/` | Spring Boot 3 + JDK 21 引擎：HNSW、BM25、RRF 融合、精排编排、快照/压实、REST、JMH 与召回基准 |
+| `vector-search-java/` | Spring Boot 3 + JDK 21 引擎：HNSW（f32 / SQ8 两种精度）、BM25、RRF 融合、带过滤的检索、精排编排、快照/压实、REST、JMH 与召回基准 |
 | `model-service/` | FastAPI + `bge-small-zh-v1.5`（**512 维**）+ `bge-reranker`：编码、动态批处理、精排打分 |
 | `vector-search-java/src/main/resources/static/` | 前端三页，**原生 HTML/CSS/JS 无构建**：`#/search`、`#/library`、`#/ops` |
-| `scripts/` | `dev.ps1` `start\|stop\|status`、`run_bench.ps1`、`load_corpus.py`、`render_bench_report.py`、`smoke_test.py` |
+| `scripts/` | `dev.ps1` `start\|stop\|status`、`run_bench.ps1`、`bench_concurrency_pinned.ps1`（绑核并发基准）、`load_corpus.py`、`render_bench_report.py`、`smoke_test.py` |
 | `bench/` | `REPORT.md`（**脚本生成，禁止手改**）+ `results/*.json`（原始数据） |
 | `docs/` | `RESUME.md`（简历文案 + 面试问答）、`COMPETITORS.md`（竞品对比）、`DEPLOY.md`、`architecture.*` |
 | `data/corpus/` | 评测语料（4 个 md，切块后约 602 块，含代码，用于 recall 基准） |
@@ -39,9 +39,10 @@ cd 'G:\all workspace\vector-search'
 测试与基准：
 
 ```powershell
-cd vector-search-java; mvn -B -ntp test        # 57 个
+cd vector-search-java; mvn -B -ntp test        # 80 个
 cd model-service; .\.venv\Scripts\python.exe -m pytest tests -q   # 10 个
 .\scripts\run_bench.ps1                        # 重算 bench/REPORT.md
+.\scripts\bench_concurrency_pinned.ps1         # 并发基准（必须绑核，先停服务）
 ```
 
 ## 改代码前必须知道
@@ -54,7 +55,7 @@ cd model-service; .\.venv\Scripts\python.exe -m pytest tests -q   # 10 个
 
 ## 验收（"完成"的定义）
 
-- `mvn test` 57 个全绿、`pytest` 10 个全绿
+- `mvn test` 80 个全绿、`pytest` 10 个全绿
 - `dev.ps1 start` 后 `/api/stats` 有数据、能检索出结果
 - **改检索/索引逻辑必须附基准数字的前后对比**（`bench/REPORT.md` 或临时脚本都行，但不能只有"编译通过"）
 - 完成 = 证据 + 一行 `未验证：`
@@ -65,7 +66,7 @@ cd model-service; .\.venv\Scripts\python.exe -m pytest tests -q   # 10 个
 2. **`.ps1` 必须 UTF-8 BOM**。否则 5.1 按 GBK 解码，中文把引号吃掉，报语法错。
 3. **管道接 `Select-String` 会假报 `[exit code: 1]`**。真实结果看 `$LASTEXITCODE`，或把输出重定向到日志再解析。
 4. **禁止用 `Get-Content`/`Set-Content` 往返源码文件** —— 5.1 按 GBK 读、加 BOM 写，会把中文全变成 `U+FFFD`（曾经毁掉整个 `HnswIndex.java`，只能从 git 恢复）。改文件只用 `edit`/`write` 工具，或 `[System.IO.File]` 显式指定 UTF8。
-5. **并发基准在这台机器上不可信**：i7-14650HX 是 8 P + 8 E 混合核，同一 8 线程配置跨轮次测出 20k / 28k / 35k / 42k / 82k ops/s（4 倍差）。**不要在简历或 README 里写并发数字**，报告第四节已经把原因写明。
+5. **并发基准必须绑核**：i7-14650HX 是 8 P + 8 E 混合核，E 核实测慢 1.81 倍（同一份工作 P 核 17.62 ms / E 核 31.83 ms）。不绑核时同一 8 线程配置跨轮次测出 20k~82k ops/s（4 倍差）；用 `scripts/bench_concurrency_pinned.ps1`（主进程 + JMH fork 的 worker 都要钉到 0-7）后标准差降到 1.5%-6.4%。判断数字能不能用，先看标准差，不要看均值好不好看。
 6. **网络**：HuggingFace 要 `HF_ENDPOINT=https://hf-mirror.com`；pip 用 `mirrors.aliyun.com/pypi/simple`；Maven 用 aliyun 镜像；`raw.githubusercontent.com` **在本机超时**，读 GitHub README 用 `api.github.com/repos/{o}/{r}/readme` + `Accept: application/vnd.github.raw`。
 7. **`git push` 的输出走 stderr**，PowerShell 会当成 `NativeCommandError`，忽略即可，看 `old..new main -> main` 那行才是真结果。
 
