@@ -111,7 +111,7 @@ HR 和面试官不会读完所有代码 —— 他们把这份东西当**证据*
 | 精排延迟代价 | 43 ms → **599 ms**（CPU，10 条候选） | `evaluate.py` |
 | **墓碑压实**（124 → 84 篇） | **1.02 秒**；词表 6,762 → 4,558，平均长度 119.1 → 106.8 | `POST /api/admin/compact` |
 | 读锁开销（单线程无竞争） | **16 ns**，占一次 104 µs 检索的 0.015% | `LockOverheadBenchmark` |
-| 单元测试 | **84 个 Java + 10 个 Python** 全绿 | `mvn test` / `pytest` |
+| 单元测试 | **85 个 Java + 10 个 Python** 全绿 | `mvn test` / `pytest` |
 
 ### 口径说明（重要）
 
@@ -611,7 +611,7 @@ BM25 侧同样要遍历每条 posting list 才能把它摘掉。
 
 ## 五、投递前检查清单
 
-- [ ] `mvn test` 全绿（84 个用例）
+- [ ] `mvn test` 全绿（85 个用例）
 - [ ] `cd model-service && python -m pytest tests -q` 全绿（10 个用例）
 - [ ] `.\scripts\run_bench.ps1` 能跑完并生成 `bench/REPORT.md`
 - [ ] `bench/REPORT.md` 的数字与本文档一致

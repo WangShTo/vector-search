@@ -46,6 +46,19 @@ def post_json(url: str, payload: dict, timeout: float) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _to_document(chunk: dict) -> dict:
+    """把语料行转成 /api/documents 的一条文档。
+
+    语料行里的 `source` 是切块时记下来的文件名，必须一起送进去：不送的话
+    整批都会被标成「未标注」，页面上的来源筛选就没得选了。
+    """
+    document = {"id": chunk["id"], "text": chunk["text"]}
+    source = chunk.get("source")
+    if source:
+        document["source"] = source
+    return document
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="把语料灌进检索服务")
     parser.add_argument("--corpus", default="data/eval/corpus.jsonl")
@@ -84,7 +97,7 @@ def main() -> int:
 
     for start in range(0, len(chunks), args.batch_size):
         batch = chunks[start : start + args.batch_size]
-        payload = {"documents": [{"id": c["id"], "text": c["text"]} for c in batch]}
+        payload = {"documents": [_to_document(c) for c in batch]}
         try:
             result = post_json(f"{args.service}/api/documents", payload, args.timeout)
             indexed += result["indexed"]

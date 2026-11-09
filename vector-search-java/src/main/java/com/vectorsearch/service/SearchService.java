@@ -394,7 +394,13 @@ public class SearchService {
 
         for (int i = 0; i < documents.size(); i++) {
             IndexDocumentRequest document = documents.get(i);
-            documentStore.put(document.id(), document.text(), meta);
+            // 每条自带的来源优先：整批可能来自不同文件（切好块的语料就是这样）。
+            // 没带就退回请求级的来源，再没有就是「未标注」。
+            DocumentStore.DocMeta documentMeta =
+                    document.source() == null || document.source().isBlank()
+                            ? meta
+                            : DocumentStore.DocMeta.of(document.source(), meta.importedAt());
+            documentStore.put(document.id(), document.text(), documentMeta);
             indexManager.add(document.id(), vectors[i]);
             sparseIndexManager.add(document.id(), document.text());
         }

@@ -247,12 +247,17 @@ def main() -> int:
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"结果已写入 {out_path}", flush=True)
 
-    # 扫完把索引恢复成演示语料（否则页面上看到的是评测语料）
+    # 扫完把索引恢复成演示语料（否则页面上看到的是评测语料）。
+    #
+    # 这里必须灌切好块的 corpus.jsonl，不要上传 data/corpus-demo 下的原始 md：
+    # 原文里带代码围栏，上传后由服务端分块会把 ```bash / ```json 片段也索引进去，
+    # 演示结果里会冒出代码碎片（曾经就是这么把演示页弄难看的）。
     print("恢复演示语料 …", flush=True)
     restart(best["vector"], best["bm25"])
-    run(["curl.exe", "-s", "-X", "DELETE", f"{SERVICE}/api/documents"])
-    for md in sorted((ROOT / "data" / "corpus-demo").glob("*.md")):
-        run(["curl.exe", "-s", "-X", "POST", "-F", f"file=@{md}", f"{SERVICE}/api/documents/upload"])
+    run([sys.executable, str(ROOT / "scripts" / "load_corpus.py"),
+         "--service", SERVICE,
+         "--corpus", str(ROOT / "data" / "eval-demo" / "corpus.jsonl"),
+         "--reset"])
     run(["curl.exe", "-s", "-X", "POST", f"{SERVICE}/api/admin/snapshot"])
     print("完成。", flush=True)
     return 0

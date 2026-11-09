@@ -183,7 +183,7 @@ docker compose up --build
 94 个测试，两端各跑各的：
 
 ```powershell
-# Java：84 个（核心算法、SIMD、HNSW、分词、BM25、RRF、快照、量化、带过滤的检索、鉴权、自动压实）
+# Java：85 个（核心算法、SIMD、HNSW、分词、BM25、RRF、快照、量化、带过滤的检索、鉴权、自动压实）
 cd vector-search-java
 mvn -B -ntp test
 
@@ -831,7 +831,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] Spring Boot 服务化 + 分阶段耗时统计
 - [x] Python 模型服务 + 动态批处理
 - [x] 评测脚手架（语料构建 / 查询生成 / 指标计算）
-- [x] 单元测试（**84 个** Java + 10 个 Python 用例，含 recall 对照暴力检索、过滤检索、量化、快照往返、自动压实）
+- [x] 单元测试（**85 个** Java + 10 个 Python 用例，含 recall 对照暴力检索、过滤检索、量化、快照往返、自动压实）
 - [x] JMH 微基准（SIMD 距离 / HNSW 检索 / 暴力检索 / 多线程吞吐）
 - [x] 召回率扫描器 + 自动生成基准报告
 - [x] 开发脚本（一键启停 / 灌库 / 冒烟 / 评测）
@@ -843,7 +843,7 @@ python evaluate.py --queries ../data/eval/queries.jsonl --top-k 10 --label hnsw-
 - [x] **二阶段精排**（cross-encoder，MRR +9~14%，延迟 43ms → 599ms）
 - [x] **应用界面**（检索 / 知识库 / 索引运维三个页面，原生 HTML/CSS/JS 无构建，
       含文档上传、分页管理、逻辑删除、快照落盘、三路对比与阶段耗时条）
-- [x] CI（GitHub Actions，push/PR 自动跑 84 个 Java 测试 + 10 个 Python 测试 + 前端资源检查）
+- [x] CI（GitHub Actions，push/PR 自动跑 85 个 Java 测试 + 10 个 Python 测试 + 前端资源检查）
 - [x] **可选管理密钥**（保护 `DELETE` 与 `/api/admin/**`，默认关闭，常数时间比较）
 - [x] **墓碑压实**（活节点搬进新图 + BM25 整表重建 + 清墓碑，不重新调用模型）
 - [x] **SQ8 量化**（int8 存储：内存 273.8 → 81.8 MB，recall 0.9983 → 0.9150，延迟 ×1.4）
