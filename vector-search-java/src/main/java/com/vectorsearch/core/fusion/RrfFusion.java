@@ -37,7 +37,9 @@ import java.util.Map;
  * <ul>
  *   <li><b>绕开了分数不可比问题</b>，只依赖"谁排在前面"这个排名信息</li>
  *   <li>对异常分数免疫：某一路给出一个离谱的高分，只要排名没变，结果就不受影响</li>
- *   <li>不需要任何调参 —— {@code k} 取 60 是论文的常用值，对结果影响很小</li>
+ *   <li>平滑常数 {@code k} 基本不用调 —— 60 是论文的常用值，对结果影响很小。
+ *       真正需要调的是<b>各路权重</b>，而那是可选项：不调就是等权，
+ *       调了就要用独立验证集选，见 {@link #fuse(List, double[], int, int)}</li>
  * </ul>
  *
  * <p>代价是丢掉了分数里的"置信度"信息：排第 1 但分数 0.99 与
@@ -57,13 +59,45 @@ public final class RrfFusion {
     }
 
     /**
-     * 融合多路检索结果。
+     * 融合多路检索结果，各路等权。
      *
      * @param rankings 各路结果，每路已按相关度降序排列
      * @param topK     返回条数
      * @param k        平滑常数，一般用 {@link #DEFAULT_K}
      */
     public static List<SearchResult> fuse(List<List<SearchResult>> rankings, int topK, int k) {
+        return fuse(rankings, null, topK, k);
+    }
+
+    /**
+     * 融合多路检索结果，各路可带权重。
+     *
+     * <p><b>为什么要权重</b>：等权 RRF 隐含一个假设 —— 每一路的可信度相同。
+     * 实测不成立：在词面查询上 BM25 recall 0.96、向量 0.80，
+     * 等权融合出来的 0.89 比 BM25 单路还差。原因是向量那一路的第 1 名
+     * 与 BM25 那一路的第 1 名在公式里分量相同，可前者有一半是错的，
+     * 它把对的文档从第一名挤了下去。给 BM25 加权就能压住这种「平票时的噪声」。
+     *
+     * <p>公式变成：
+     * <pre>
+     *   score(d) = Σ_i  w_i / (k + rank_i(d))
+     * </pre>
+     *
+     * <p>权重为 0 表示这一路完全不参与（等价于退化成单路检索）。
+     * 负数和 NaN 也按 0 处理 —— 排名分数非负，负权重会让「排得越靠后越加分」，
+     * 那不是加权而是把排序反过来，不该被一个配置项静默触发。
+     *
+     * <p><b>代价</b>：多了一个要调的超参数，而调参必须用<b>独立于报告数据</b>的
+     * 验证集选，否则报告里那个数字就不再是「没见过的数据上的表现」。
+     * 这就是等权 RRF 好看的地方 —— 它没有旋钮，也就没有过拟合的余地。
+     *
+     * @param weights 各路权重，下标与 {@code rankings} 对齐；长度不足时缺的按 1.0 算；
+     *                传 {@code null} 等价于全 1.0
+     */
+    public static List<SearchResult> fuse(List<List<SearchResult>> rankings,
+                                          double[] weights,
+                                          int topK,
+                                          int k) {
         if (topK <= 0 || rankings == null || rankings.isEmpty()) {
             return List.of();
         }
@@ -72,14 +106,20 @@ public final class RrfFusion {
         // 用 double 累加：多路融合时浮点误差会被放大，而最终排名对精度敏感
         Map<Integer, Double> fusedScores = new HashMap<>();
 
-        for (List<SearchResult> ranking : rankings) {
+        for (int i = 0; i < rankings.size(); i++) {
+            List<SearchResult> ranking = rankings.get(i);
             if (ranking == null) {
+                continue;
+            }
+            double weight = (weights != null && i < weights.length) ? weights[i] : 1.0;
+            if (!(weight > 0)) {
+                // 0 / 负数 / NaN：这一路不计入
                 continue;
             }
             for (int rank = 0; rank < ranking.size(); rank++) {
                 int id = ranking.get(rank).id();
                 // rank 从 0 开始，公式里从 1 开始
-                fusedScores.merge(id, 1.0 / (smoothing + rank + 1), Double::sum);
+                fusedScores.merge(id, weight / (smoothing + rank + 1), Double::sum);
             }
         }
 

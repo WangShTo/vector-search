@@ -208,7 +208,12 @@ public class SearchService {
         return reranked.size() > topK ? new ArrayList<>(reranked.subList(0, topK)) : reranked;
     }
 
-    /** 按模式决定融合方式。 */
+    /**
+     * 按模式决定融合方式。
+     *
+     * <p>hybrid 用加权 RRF，权重来自配置（默认 1.0 / 1.0，与等权完全等价）。
+     * 为什么需要权重见 {@link RrfFusion#fuse(List, double[], int, int)}。
+     */
     private List<SearchResult> fuse(String mode,
                                     List<SearchResult> denseHits,
                                     List<SearchResult> sparseHits,
@@ -217,7 +222,10 @@ public class SearchService {
             case MODE_VECTOR -> denseHits;
             case MODE_BM25 -> sparseHits;
             default -> RrfFusion.fuse(
-                    Arrays.asList(denseHits, sparseHits), topK, properties.search().rrfK());
+                    Arrays.asList(denseHits, sparseHits),
+                    properties.search().fusionWeights(),
+                    topK,
+                    properties.search().rrfK());
         };
         if (fused == null) {
             return List.of();
@@ -305,7 +313,7 @@ public class SearchService {
     /**
      * 带过滤的检索该用多大 ef。
      *
-     * <p>结论来自实测（{@code bench/REPORT.md} 第八节）：过滤会把候选池里的名额
+     * <p>结论来自实测（回归用例 {@code FilteredRetrievalTest}）：过滤会把候选池里的名额
      * 筛掉而<b>不补回来</b>。1% 选择性下 ef=50 平均只回 0.7 条、recall 0.07；
      * 把 ef 放大到 k/选择性 —— 即「保证池子里大约有 k 个合格候选」——
      * recall 回到 0.94，而且比「不过滤、只放大返回池」更快。

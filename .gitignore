@@ -58,6 +58,9 @@ bench/results/*
 # 跑一轮要十几分钟（每档 8 次测量 × 两种规模），也没必要复跑。
 !bench/results/concurrent-pinned.json
 !bench/results/concurrent-pinned-5k.json
+# 权重扫描：报告第八节的两张表由它生成。跑一轮要重启 11 次服务（约 10 分钟），
+# 不提交等于「加权比等权好」这句话没有数据来源。
+!bench/results/rrf-weights.json
 eval/results/
 
 # 服务运行日志（dev.ps1 产生）

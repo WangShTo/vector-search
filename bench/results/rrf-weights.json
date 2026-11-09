@@ -1,0 +1,102 @@
+{
+  "split": {
+    "total_queries": 150,
+    "tune_queries": 100,
+    "heldout_queries": 50,
+    "split_rule": "按文件顺序切，前 tune_queries 条调参，其余留出"
+  },
+  "selection_rule": "调参集上 MRR 最高，MRR 相同比 recall",
+  "grid": [
+    {
+      "vector": 1.0,
+      "bm25": 1.0,
+      "recall": 0.9,
+      "mrr": 0.664611111111111,
+      "ndcg": 0.7222902369327509
+    },
+    {
+      "vector": 1.0,
+      "bm25": 2.0,
+      "recall": 0.91,
+      "mrr": 0.6870833333333333,
+      "ndcg": 0.7417896599011717
+    },
+    {
+      "vector": 1.0,
+      "bm25": 3.0,
+      "recall": 0.91,
+      "mrr": 0.708,
+      "ndcg": 0.7581554838544818
+    },
+    {
+      "vector": 1.0,
+      "bm25": 4.0,
+      "recall": 0.94,
+      "mrr": 0.7315952380952381,
+      "ndcg": 0.782453354311684
+    },
+    {
+      "vector": 2.0,
+      "bm25": 1.0,
+      "recall": 0.87,
+      "mrr": 0.6461111111111112,
+      "ndcg": 0.700548970207526
+    },
+    {
+      "vector": 4.0,
+      "bm25": 1.0,
+      "recall": 0.85,
+      "mrr": 0.6264563492063492,
+      "ndcg": 0.6805365089310805
+    }
+  ],
+  "chosen": {
+    "vector": 1.0,
+    "bm25": 4.0,
+    "recall": 0.94,
+    "mrr": 0.7315952380952381,
+    "ndcg": 0.782453354311684
+  },
+  "heldout": {
+    "等权（1:1）": {
+      "mode": "hybrid",
+      "vector_weight": 1.0,
+      "bm25_weight": 1.0,
+      "recall": 0.88,
+      "mrr": 0.7357460317460317,
+      "ndcg": 0.7706414418239433,
+      "p50_total_ms": 29,
+      "p95_total_ms": 44
+    },
+    "选中权重（1:4）": {
+      "mode": "hybrid",
+      "vector_weight": 1.0,
+      "bm25_weight": 4.0,
+      "recall": 0.94,
+      "mrr": 0.7736904761904762,
+      "ndcg": 0.8144252095345844,
+      "p50_total_ms": 27,
+      "p95_total_ms": 32
+    },
+    "纯向量": {
+      "mode": "vector",
+      "vector_weight": 1.0,
+      "bm25_weight": 4.0,
+      "recall": 0.82,
+      "mrr": 0.6186111111111111,
+      "ndcg": 0.6670268050174127,
+      "p50_total_ms": 39,
+      "p95_total_ms": 45
+    },
+    "纯 BM25": {
+      "mode": "bm25",
+      "vector_weight": 1.0,
+      "bm25_weight": 4.0,
+      "recall": 0.98,
+      "mrr": 0.7934126984126983,
+      "ndcg": 0.8401053435271347,
+      "p50_total_ms": 0,
+      "p95_total_ms": 0
+    }
+  }
+}

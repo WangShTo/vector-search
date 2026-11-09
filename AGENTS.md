@@ -39,7 +39,7 @@ cd 'G:\all workspace\vector-search'
 测试与基准：
 
 ```powershell
-cd vector-search-java; mvn -B -ntp test        # 80 个
+cd vector-search-java; mvn -B -ntp test        # 84 个
 cd model-service; .\.venv\Scripts\python.exe -m pytest tests -q   # 10 个
 .\scripts\run_bench.ps1                        # 重算 bench/REPORT.md
 .\scripts\bench_concurrency_pinned.ps1         # 并发基准（必须绑核，先停服务）
@@ -55,7 +55,7 @@ cd model-service; .\.venv\Scripts\python.exe -m pytest tests -q   # 10 个
 
 ## 验收（"完成"的定义）
 
-- `mvn test` 80 个全绿、`pytest` 10 个全绿
+- `mvn test` 84 个全绿、`pytest` 10 个全绿
 - `dev.ps1 start` 后 `/api/stats` 有数据、能检索出结果
 - **改检索/索引逻辑必须附基准数字的前后对比**（`bench/REPORT.md` 或临时脚本都行，但不能只有"编译通过"）
 - 完成 = 证据 + 一行 `未验证：`

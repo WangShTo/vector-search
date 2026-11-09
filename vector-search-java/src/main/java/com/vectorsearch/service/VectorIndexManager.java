@@ -144,7 +144,7 @@ public class VectorIndexManager {
      *
      * <p>过滤器和 efSearch 一起交给索引，让图遍历在<b>遍历过程中</b>就知道
      * 哪些节点不参与 —— 而不是搜完再筛。为什么这很重要见
-     * {@code bench/REPORT.md} 第八节：搜完再筛在低选择性下会塌。
+     * {@code FilteredRetrievalTest}：1% 选择性下搜完再筛的 recall 只有 0.07，下推是 0.94。
      */
     public List<SearchResult> search(float[] query, int k, int efSearch,
                                      java.util.function.IntPredicate filter) {

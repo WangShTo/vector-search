@@ -198,6 +198,76 @@ class HybridRetrievalTest {
         assertTrue(RrfFusion.fuse(List.of(List.of(hit(1, 1f))), 0, 60).isEmpty());
     }
 
+    // =====================================================================
+    // 加权 RRF
+    // =====================================================================
+
+    @Test
+    @DisplayName("不传权重时与等权版本逐位一致")
+    void nullWeightsEqualUnweighted() {
+        List<SearchResult> first = List.of(hit(1, 0.9f), hit(2, 0.8f), hit(3, 0.7f));
+        List<SearchResult> second = List.of(hit(3, 30f), hit(2, 20f), hit(1, 10f));
+        List<List<SearchResult>> both = List.of(first, second);
+
+        List<SearchResult> plain = RrfFusion.fuse(both, 3, RrfFusion.DEFAULT_K);
+        List<SearchResult> nulls = RrfFusion.fuse(both, null, 3, RrfFusion.DEFAULT_K);
+        List<SearchResult> ones = RrfFusion.fuse(both, new double[]{1.0, 1.0}, 3, RrfFusion.DEFAULT_K);
+
+        for (int i = 0; i < plain.size(); i++) {
+            assertEquals(plain.get(i).id(), nulls.get(i).id());
+            assertEquals(plain.get(i).id(), ones.get(i).id());
+            assertEquals(plain.get(i).score(), ones.get(i).score(), 1e-9f);
+        }
+    }
+
+    @Test
+    @DisplayName("权重为 0 的那一路完全不参与，结果退化成另一路的排序")
+    void zeroWeightDropsRoute() {
+        // 两路排序完全相反：靠 id 揭不出谁的分量更大，只有权重能决定
+        List<SearchResult> dense = List.of(hit(1, 0.9f), hit(2, 0.8f), hit(3, 0.7f));
+        List<SearchResult> sparse = List.of(hit(3, 30f), hit(2, 20f), hit(1, 10f));
+
+        List<SearchResult> onlySparse = RrfFusion.fuse(
+                List.of(dense, sparse), new double[]{0.0, 1.0}, 3, RrfFusion.DEFAULT_K);
+
+        assertEquals(3, onlySparse.get(0).id(), "关掉稠密那一路后，BM25 的第 1 名应当第一");
+        assertEquals(2, onlySparse.get(1).id());
+        assertEquals(1, onlySparse.get(2).id());
+    }
+
+    @Test
+    @DisplayName("加权的效果就是让权重大的那一路的第 1 名胜出")
+    void heavierRouteWinsTie() {
+        List<SearchResult> dense = List.of(hit(1, 0.9f), hit(2, 0.8f), hit(3, 0.7f));
+        List<SearchResult> sparse = List.of(hit(3, 30f), hit(2, 20f), hit(1, 10f));
+
+        // 等权时 1 与 3 的融合分精确相等，靠 id 升序把 1 排前面
+        List<SearchResult> even = RrfFusion.fuse(
+                List.of(dense, sparse), new double[]{1.0, 1.0}, 3, RrfFusion.DEFAULT_K);
+        assertEquals(1, even.get(0).id(), "等权时是并列，由 id 决胜");
+
+        // 给 BM25 三倍权重后，它认可的第 1 名（id 3）应当反超
+        List<SearchResult> bm25Heavy = RrfFusion.fuse(
+                List.of(dense, sparse), new double[]{1.0, 3.0}, 3, RrfFusion.DEFAULT_K);
+        assertEquals(3, bm25Heavy.get(0).id(), "BM25 权重更大时它的第 1 名应当第一");
+    }
+
+    @Test
+    @DisplayName("负权重按 0 处理，不会把排序反过来")
+    void negativeWeightIsIgnored() {
+        List<SearchResult> dense = List.of(hit(1, 0.9f), hit(2, 0.8f));
+        List<SearchResult> sparse = List.of(hit(2, 30f), hit(1, 20f));
+
+        List<SearchResult> negative = RrfFusion.fuse(
+                List.of(dense, sparse), new double[]{-5.0, 1.0}, 2, RrfFusion.DEFAULT_K);
+        List<SearchResult> zeroed = RrfFusion.fuse(
+                List.of(dense, sparse), new double[]{0.0, 1.0}, 2, RrfFusion.DEFAULT_K);
+
+        assertEquals(zeroed.get(0).id(), negative.get(0).id(),
+                "负权重等价于关掉这一路，而不是给它「排得越靠后越加分」");
+        assertEquals(zeroed.get(1).id(), negative.get(1).id());
+    }
+
     private static SearchResult hit(int id, float score) {
         return new SearchResult(id, score);
     }

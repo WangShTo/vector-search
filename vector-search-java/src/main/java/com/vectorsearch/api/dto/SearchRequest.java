@@ -55,7 +55,7 @@ public record SearchRequest(
          *
          * <p>这是<b>带过滤的检索</b>，不是「搜完再筛」：过滤条件会下推到图遍历里。
          * 两者的差别在低选择性下是数量级的 —— 只占 1% 的来源，搜完再筛 recall 接近 0，
-         * 下推之后仍然能到 0.94。实测见 {@code bench/REPORT.md} 第八节。
+         * 下推之后仍然能到 0.94。实测见 {@code FilteredRetrievalTest}。
          *
          * <p>选多个来源时用 {@link #sources()}。两个字段都给时取并集，
          * 单值版本保留是因为它是绝大多数调用方的写法。

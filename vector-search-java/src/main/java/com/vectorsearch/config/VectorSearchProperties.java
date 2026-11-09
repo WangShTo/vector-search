@@ -34,7 +34,7 @@ public record VectorSearchProperties(
             index = new Index(512, 16, 200, 100, "./data/index", 300, 50, "f32");
         }
         if (search == null) {
-            search = new Search("hybrid", 50, 60, false, 20);
+            search = new Search("hybrid", 50, 60, false, 20, 1.0, 1.0);
         }
         if (security == null) {
             security = new Security("");
@@ -101,9 +101,20 @@ public record VectorSearchProperties(
      *                         cross-encoder 前向，是数量级的延迟代价，应该显式开启。
      * @param rerankCandidates 精排多少条候选。这是延迟与精度的主旋钮：
      *                         20 条时 CPU 上大约几百毫秒，50 条就要一秒以上。
+     * @param vectorWeight     融合时稠密那一路的权重，默认 1.0（等权）。
+     *                         <b>0 表示这一路不参与</b>，此时 hybrid 退化成单路检索。
+     *                         <p>权重是可选旋钮，不是必须调的参数：等权没有超参数，
+     *                         也就没有过拟合的余地；一旦加权，选值必须用<b>独立于报告
+     *                         数据</b>的验证集，否则报告上的数字就不再是样本外表现。
+     * @param bm25Weight       融合时 BM25 那一路的权重，默认 1.0。
+     *                         <p>用 {@code Double} 而不是 {@code double} 是有原因的：
+     *                         yml 里不写这项时前者绑定成 {@code null}、后者绑定成
+     *                         {@code 0.0}。用基本类型会把「没配」误当成「权重为零」，
+     *                         然后 hybrid 模式静悄悄地少掉一路。
      */
     public record Search(String defaultMode, int candidatePool, int rrfK,
-                         boolean rerankDefault, int rerankCandidates) {
+                         boolean rerankDefault, int rerankCandidates,
+                         Double vectorWeight, Double bm25Weight) {
         public Search {
             if (defaultMode == null || defaultMode.isBlank()) {
                 defaultMode = "hybrid";
@@ -117,6 +128,24 @@ public record VectorSearchProperties(
             if (rerankCandidates <= 0) {
                 rerankCandidates = 20;
             }
+            if (vectorWeight == null) {
+                vectorWeight = 1.0;
+            }
+            if (bm25Weight == null) {
+                bm25Weight = 1.0;
+            }
+            if (vectorWeight < 0 || bm25Weight < 0
+                    || Double.isNaN(vectorWeight) || Double.isNaN(bm25Weight)) {
+                // 负权重等于把排序反过来（排得越靠后加分越多），不是「少用一点」
+                throw new IllegalArgumentException(
+                        "vector-search.search.vector-weight / bm25-weight 必须 >= 0，实际是 "
+                                + vectorWeight + " / " + bm25Weight);
+            }
+            if (vectorWeight + bm25Weight <= 0) {
+                // 两路都关掉就没有 hybrid 这个模式了，与其给空结果不如启动就报错
+                throw new IllegalArgumentException(
+                        "vector-search.search.vector-weight 与 bm25-weight 不能同时为 0");
+            }
             if (!defaultMode.equals("vector")
                     && !defaultMode.equals("bm25")
                     && !defaultMode.equals("hybrid")) {
@@ -124,6 +153,11 @@ public record VectorSearchProperties(
                         "vector-search.search.default-mode 只能是 vector / bm25 / hybrid，实际是 "
                                 + defaultMode);
             }
+        }
+
+        /** 融合用的权重数组，顺序是 [稠密, 稀疏]。 */
+        public double[] fusionWeights() {
+            return new double[]{vectorWeight, bm25Weight};
         }
     }
 

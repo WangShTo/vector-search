@@ -730,10 +730,107 @@ def section_hybrid(results_dir: Path) -> str:
     return "\n".join(lines)
 
 
+def section_rrf_weights(results_dir: Path) -> str:
+    """加权 RRF：权重是怎么定的，凭什么相信这个数。"""
+    data = load_json(results_dir / "rrf-weights.json")
+    if not data:
+        return ""
+
+    split = data.get("split", {})
+    grid = data.get("grid", [])
+    chosen = data.get("chosen", {})
+    heldout = data.get("heldout", {})
+    if not grid or not chosen or not heldout:
+        return ""
+
+    equal_label = "等权（1:1）"
+    chosen_label = f"选中权重（{chosen['vector']:g}:{chosen['bm25']:g}）"
+
+    lines = [
+        "## 八、加权 RRF：权重从哪来",
+        "",
+        "等权 RRF 的分数是 `Σ 1/(k + rank)`，两路贡献相同。但实测两路并不等强：",
+        "词面查询上纯 BM25 的 recall@10 是 0.96、混合只有 0.89 —— 等权等于让弱的那一路",
+        "把强的那一路往下拽。加权能修正，但权重是自由参数：**在同一批查询上挑权重、再在同一批上报分，",
+        "那个分不是样本外表现**。所以这一步把评测集切成两半：",
+        "",
+        f"- 调参集 **{split.get('tune_queries')} 条**（按文件顺序取前若干条）—— 只用来扫权重",
+        f"- 留出集 **{split.get('heldout_queries')} 条**（其余）—— 只用来报分，不参与任何选择",
+        "",
+        f"选择规则：{data.get('selection_rule', '调参集 MRR 最高')}。",
+        "",
+        "### 调参集上的网格",
+        "",
+        "| vector : bm25 | recall@10 | MRR@10 | NDCG@10 |",
+        "|---|---|---|---|",
+    ]
+    for row in grid:
+        hit = row["vector"] == chosen["vector"] and row["bm25"] == chosen["bm25"]
+        wrap = (lambda v: f"**{v:.4f}**") if hit else (lambda v: f"{v:.4f}")
+        lines.append(
+            f"| {row['vector']:g} : {row['bm25']:g} "
+            f"| {wrap(row['recall'])} | {wrap(row['mrr'])} | {wrap(row['ndcg'])} |")
+
+    lines += [
+        "",
+        "### 留出集上，四组对比",
+        "",
+        "| 配置 | recall@10 | MRR@10 | NDCG@10 |",
+        "|---|---|---|---|",
+    ]
+    for label in (equal_label, chosen_label, "纯向量", "纯 BM25"):
+        row = heldout.get(label)
+        if not row:
+            continue
+        wrap = (lambda v: f"**{v:.4f}**") if label == chosen_label else (lambda v: f"{v:.4f}")
+        lines.append(f"| {label} | {wrap(row['recall'])} | {wrap(row['mrr'])} | {wrap(row['ndcg'])} |")
+
+    equal = heldout.get(equal_label)
+    tuned = heldout.get(chosen_label)
+    lines.append("")
+    if equal and tuned:
+        lines.append(
+            f"留出集上，加权相对等权：MRR **{tuned['mrr'] - equal['mrr']:+.4f}**、"
+            f"recall **{tuned['recall'] - equal['recall']:+.4f}**。")
+
+    bm25_only = heldout.get("纯 BM25")
+    if bm25_only and tuned:
+        lines += [
+            "### 结论：差距收窄了，但没关上",
+            "",
+            f"留出集上 **纯 BM25 仍然好于加权混合**：recall {bm25_only['recall']:.4f} vs "
+            f"{tuned['recall']:.4f}（差 {bm25_only['recall'] - tuned['recall']:+.4f}），"
+            f"MRR {bm25_only['mrr']:.4f} vs {tuned['mrr']:.4f}"
+            f"（差 {bm25_only['mrr'] - tuned['mrr']:+.4f}）。",
+            "",
+            "而且网格的最优解落在**边界上**（越往 BM25 偏越好，扫到的最右端就是最好的）——",
+            "这说明在这批纯词面查询上，最优点就是「几乎只用 BM25」。原因不难解释：",
+            "RRF 只用名次、丢掉了分数，当一路的分数已经非常可信时，",
+            "把它的名次和一路弱信号做等距平均就是净损失。",
+            "",
+            "**加权修的是「被拖累多少」，修不了「用名次代替分数」这件事本身。**",
+            "第七节的结论在这里被再次验证：混合检索的价值在**混合查询集**上（既有词面也有语义），",
+            "不在纯词面查询上。把这条如实写出来，比报一个好看的总分有用。",
+        ]
+
+    lines += [
+        "",
+        "### 这一节的边界",
+        "",
+        f"- **调参集只有 {split.get('tune_queries')} 条查询**，网格只能粗扫；"
+        "换一份语料，最优权重未必还是这个数。",
+        "- 权重只在**词面查询**上选过。16 条语义查询样本太小，拿它调参只会调出过拟合，所以没动。",
+        "- 权重是**全局单值**，不随查询自适应。真要自适应，得先能判断「这条查询偏词面还是偏语义」，",
+        "  那是另一件事（小模型分类或查询改写），不是调一个数字能解决的。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def section_method(recall: dict) -> str:
     """方法学与局限 —— 必须写，否则是在误导人。"""
     lines = [
-        "## 八、方法学与局限",
+        "## 九、方法学与局限",
         "",
         "### 数据是合成的，不是真实 embedding",
         "",
@@ -805,6 +902,7 @@ def main() -> int:
         section_snapshot(results_dir),
         section_quantization(results_dir),
         section_hybrid(results_dir),
+        section_rrf_weights(results_dir),
         section_method(recall),
     ) if s]
 
