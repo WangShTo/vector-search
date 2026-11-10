@@ -1,0 +1,50 @@
+{"query": "明天上海会下雨吗", "category": "off-domain"}
+{"query": "今天北京限行尾号是多少", "category": "off-domain"}
+{"query": "离婚时房子怎么分割", "category": "off-domain"}
+{"query": "劳动合同到期不续签有补偿吗", "category": "off-domain"}
+{"query": "感冒发烧吃什么药好得快", "category": "off-domain"}
+{"query": "血糖偏高不能吃哪些水果", "category": "off-domain"}
+{"query": "基金定投和一次性买入哪个好", "category": "off-domain"}
+{"query": "房贷提前还款划算吗", "category": "off-domain"}
+{"query": "昨晚欧冠谁赢了", "category": "off-domain"}
+{"query": "NBA 总决赛最有价值球员是谁", "category": "off-domain"}
+{"query": "最近有什么好看的悬疑电影", "category": "off-domain"}
+{"query": "周杰伦最新专辑叫什么", "category": "off-domain"}
+{"query": "红烧肉怎么做才不腻", "category": "off-domain"}
+{"query": "火锅底料哪个牌子好吃", "category": "off-domain"}
+{"query": "去日本旅游需要办什么签证", "category": "off-domain"}
+{"query": "三亚几月份去最合适", "category": "off-domain"}
+{"query": "双十一一般什么时候开始", "category": "off-domain"}
+{"query": "一千五左右的手机买哪个", "category": "off-domain"}
+{"query": "考研数学怎么复习效率高", "category": "off-domain"}
+{"query": "英语四级多少分算通过", "category": "off-domain"}
+{"query": "怎么用 Excel 做数据透视表", "category": "off-domain"}
+{"query": "Photoshop 怎么把背景抠掉", "category": "off-domain"}
+{"query": "最近总失眠怎么办", "category": "off-domain"}
+{"query": "养猫需要注意什么", "category": "off-domain"}
+{"query": "周末带孩子去哪里玩好", "category": "off-domain"}
+{"query": "React 里怎么做一个带校验的登录页", "category": "adjacent-tech"}
+{"query": "Vue3 的响应式原理是什么", "category": "adjacent-tech"}
+{"query": "MySQL 联合索引的最左前缀原则", "category": "adjacent-tech"}
+{"query": "数据库死锁怎么排查", "category": "adjacent-tech"}
+{"query": "Redis 缓存穿透和雪崩怎么防", "category": "adjacent-tech"}
+{"query": "Kafka 怎么保证消息不重复消费", "category": "adjacent-tech"}
+{"query": "Docker 镜像怎么减小体积", "category": "adjacent-tech"}
+{"query": "Kubernetes 的 Pod 一直重启怎么查", "category": "adjacent-tech"}
+{"query": "Linux 查看端口占用用什么命令", "category": "adjacent-tech"}
+{"query": "git rebase 和 merge 有什么区别", "category": "adjacent-tech"}
+{"query": "怎么解决 git 冲突", "category": "adjacent-tech"}
+{"query": "Spring 事务的传播行为有哪些", "category": "adjacent-tech"}
+{"query": "微服务之间怎么做鉴权", "category": "adjacent-tech"}
+{"query": "JWT 过期了怎么无感刷新", "category": "adjacent-tech"}
+{"query": "两数之和怎么用哈希表解", "category": "adjacent-tech"}
+{"query": "快速排序的时间复杂度是多少", "category": "adjacent-tech"}
+{"query": "三次握手为什么不是两次", "category": "adjacent-tech"}
+{"query": "TCP 和 UDP 的区别", "category": "adjacent-tech"}
+{"query": "进程和线程的区别", "category": "adjacent-tech"}
+{"query": "CSS 怎么实现水平垂直居中", "category": "adjacent-tech"}
+{"query": "微信小程序怎么发布上线", "category": "adjacent-tech"}
+{"query": "Python 怎么读取 Excel 文件", "category": "adjacent-tech"}
+{"query": "Nginx 反向代理怎么配置", "category": "adjacent-tech"}
+{"query": "MongoDB 和 MySQL 怎么选", "category": "adjacent-tech"}
+{"query": "单元测试怎么 mock 数据库", "category": "adjacent-tech"}

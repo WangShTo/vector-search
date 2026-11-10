@@ -3,6 +3,7 @@ package com.vectorsearch.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vectorsearch.api.dto.IndexDocumentRequest;
 import com.vectorsearch.client.ModelServiceClient;
+import com.vectorsearch.config.AbstentionProperties;
 import com.vectorsearch.config.VectorSearchProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,8 @@ class IndexDocumentSourceTest {
                 indexManager,
                 sparseIndexManager,
                 store,
-                properties);
+                properties,
+                new AbstentionProperties(false, null, null, null));
 
         service.index(List.of(
                 new IndexDocumentRequest(0, "第一篇正文", "a.md"),

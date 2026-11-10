@@ -361,6 +361,21 @@
     }).join("");
   }
 
+  function renderAbstention(a) {
+    var scores = [];
+    if (a.vectorTop1 != null) scores.push("余弦最高 " + a.vectorTop1.toFixed(3));
+    if (a.bm25Top1 != null) scores.push("BM25 最高 " + a.bm25Top1.toFixed(2));
+    return '<div class="abstain">' +
+      '<div class="abstain-title">没有找到足够相关的内容</div>' +
+      '<div class="abstain-why">判据：<code>' + esc(a.reason || "") + "</code>" +
+        (scores.length ? '<span class="abstain-scores">' + esc(scores.join(" · ")) + "</span>" : "") +
+      "</div>" +
+      '<div class="abstain-hint">这不是出错。系统认为库里的内容跟这个问题不匹配，' +
+        "所以没有返回结果 —— 硬凑十条勉强相关的文档比空结果更糟，" +
+        "因为你会以为它找到了。可以换个说法，或先确认这个问题在知识库里。</div>" +
+    "</div>";
+  }
+
   function renderSingleResult(resp) {
     var timing = resp.timing || {};
     renderTiming(timing);
@@ -368,12 +383,14 @@
     var flags = [];
     if (resp.reranked) flags.push("已精排");
     if (resp.indexType) flags.push(resp.indexType);
+    var abstained = resp.abstention && resp.abstention.abstained;
 
     $("out").innerHTML =
       '<div class="results-head"><h2>' + esc(mode) + " 结果</h2>" +
         '<span class="meta">top ' + (resp.hits ? resp.hits.length : 0) + " · " +
         fmtMs(timing.totalMs) + (flags.length ? " · " + esc(flags.join(" · ")) : "") + "</span></div>" +
-      renderHits(resp.hits, MODE_COLOR[mode] || "#5b9dff", null);
+      (abstained ? renderAbstention(resp.abstention)
+                 : renderHits(resp.hits, MODE_COLOR[mode] || "#5b9dff", null));
   }
 
   function renderCompareResult(list) {

@@ -8,9 +8,11 @@ import com.vectorsearch.api.dto.SearchResponse;
 import com.vectorsearch.client.ModelServiceClient;
 import com.vectorsearch.client.ModelServiceException;
 import com.vectorsearch.client.dto.RerankResponse;
+import com.vectorsearch.config.AbstentionProperties;
 import com.vectorsearch.config.VectorSearchProperties;
 import com.vectorsearch.core.SearchResult;
 import com.vectorsearch.core.fusion.RrfFusion;
+import com.vectorsearch.core.retrieval.AbstentionPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -56,17 +58,20 @@ public class SearchService {
     private final SparseIndexManager sparseIndexManager;
     private final DocumentStore documentStore;
     private final VectorSearchProperties properties;
+    private final AbstentionProperties abstentionProperties;
 
     public SearchService(ModelServiceClient modelServiceClient,
                          VectorIndexManager indexManager,
                          SparseIndexManager sparseIndexManager,
                          DocumentStore documentStore,
-                         VectorSearchProperties properties) {
+                         VectorSearchProperties properties,
+                         AbstentionProperties abstentionProperties) {
         this.modelServiceClient = modelServiceClient;
         this.indexManager = indexManager;
         this.sparseIndexManager = sparseIndexManager;
         this.documentStore = documentStore;
         this.properties = properties;
+        this.abstentionProperties = abstentionProperties;
     }
 
     public SearchResponse search(SearchRequest request) {
@@ -128,6 +133,37 @@ public class SearchService {
         }
         long searchStart = needDense ? embeddingEndsAt : start;
 
+        // 拒答：在融合之前判，用两路的**原生分**。
+        //
+        // 顺序很关键：一旦融合，两路的量纲都被换成排名倒数，原始分数就消失了。
+        // 而排名倒数（RRF）恰恰是判别力最差的信号 —— 实测 AUC 0.78，
+        // 而余弦 0.92、BM25 0.90。所以必须在融合之前取分。
+        SearchResponse.Abstention abstention = null;
+        if (abstentionProperties.on()) {
+            AbstentionPolicy.Signals signals = new AbstentionPolicy.Signals(
+                    denseHits == null || denseHits.isEmpty() ? null : denseHits.get(0).score(),
+                    sparseHits == null || sparseHits.isEmpty() ? null : sparseHits.get(0).score());
+            AbstentionPolicy.Decision decision = AbstentionPolicy.decide(
+                    signals,
+                    abstentionProperties.rule(),
+                    abstentionProperties.vectorThreshold(),
+                    abstentionProperties.bm25Threshold());
+            abstention = new SearchResponse.Abstention(
+                    decision.abstained(),
+                    abstentionProperties.rule(),
+                    decision.reason(),
+                    signals.vectorTop1(),
+                    signals.bm25Top1());
+            if (decision.abstained()) {
+                // 拒答 = 空结果，不是低分结果。
+                // 返回十条「最像但都不像」的文档，用户会以为系统找到了，
+                // 这比空结果糟得多 —— 错误要显式，不要静默。
+                long end = System.nanoTime();
+                return respond(request.query(), mode, false, List.of(),
+                        start, embeddingEndsAt, searchStart, end, abstention);
+            }
+        }
+
         // 第一阶段：召回 + 融合
         //
         // 这里故意按 pool（而不是 topK）来截断：被逻辑删除的文档仍然留在索引里，
@@ -159,7 +195,8 @@ public class SearchService {
         }
         long end = System.nanoTime();
 
-        return respond(request.query(), mode, reranked, results, start, embeddingEndsAt, searchStart, end);
+        return respond(request.query(), mode, reranked, results,
+                start, embeddingEndsAt, searchStart, end, abstention);
     }
 
     /**
@@ -343,7 +380,8 @@ public class SearchService {
                                    long start,
                                    long embeddingEndsAt,
                                    long searchStart,
-                                   long end) {
+                                   long end,
+                                   SearchResponse.Abstention abstention) {
         List<SearchHit> hits = new ArrayList<>(results.size());
         for (SearchResult result : results) {
             hits.add(new SearchHit(
@@ -360,7 +398,8 @@ public class SearchService {
                 new SearchResponse.Timing(
                         toMillis(embeddingEndsAt - start),
                         toMillis(end - searchStart),
-                        toMillis(end - start)));
+                        toMillis(end - start)),
+                abstention);
     }
 
     /**
