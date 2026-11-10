@@ -1,0 +1,499 @@
+{
+  "protocol": {
+    "base_config": "paragraph/400/50",
+    "query_count": 145,
+    "seed": 42,
+    "document_count": 44,
+    "common_subset": 87,
+    "abstention": "disabled"
+  },
+  "configs": [
+    {
+      "label": "p-150-50",
+      "strategy": "paragraph",
+      "chunk_size": 150,
+      "overlap": 50,
+      "chunk_count": 1833,
+      "avg_chars": 123.9,
+      "p50_chars": 143,
+      "max_chars": 150,
+      "queries_total": 145,
+      "queries_kept": 92,
+      "queries_dropped": 53,
+      "queries_ambiguous": 24,
+      "index_seconds": 55.1,
+      "vector": {
+        "recall@10": 0.8261,
+        "mrr@10": 0.5615,
+        "ndcg@10": 0.6262,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 34.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.9674,
+        "mrr@10": 0.8285,
+        "ndcg@10": 0.863,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.9239,
+        "mrr@10": 0.7154,
+        "ndcg@10": 0.7663,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 34.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.9195,
+          "mrr@10": 0.7048,
+          "ndcg@10": 0.7571,
+          "latency_p50_ms": 29.0,
+          "latency_p95_ms": 32.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-200-50",
+      "strategy": "paragraph",
+      "chunk_size": 200,
+      "overlap": 50,
+      "chunk_count": 1295,
+      "avg_chars": 159.1,
+      "p50_chars": 183,
+      "max_chars": 200,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 25,
+      "index_seconds": 39.6,
+      "vector": {
+        "recall@10": 0.871,
+        "mrr@10": 0.6043,
+        "ndcg@10": 0.6682,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 33.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.9677,
+        "mrr@10": 0.8111,
+        "ndcg@10": 0.8503,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.9247,
+        "mrr@10": 0.7164,
+        "ndcg@10": 0.7672,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 33.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.9195,
+          "mrr@10": 0.6969,
+          "ndcg@10": 0.7512,
+          "latency_p50_ms": 28.0,
+          "latency_p95_ms": 33.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-300-50",
+      "strategy": "paragraph",
+      "chunk_size": 300,
+      "overlap": 50,
+      "chunk_count": 861,
+      "avg_chars": 222.8,
+      "p50_chars": 253,
+      "max_chars": 300,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 21,
+      "index_seconds": 29.0,
+      "vector": {
+        "recall@10": 0.8172,
+        "mrr@10": 0.5788,
+        "ndcg@10": 0.6359,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.9677,
+        "mrr@10": 0.8569,
+        "ndcg@10": 0.8835,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.9247,
+        "mrr@10": 0.7078,
+        "ndcg@10": 0.7599,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 33.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.931,
+          "mrr@10": 0.7125,
+          "ndcg@10": 0.7649,
+          "latency_p50_ms": 28.0,
+          "latency_p95_ms": 32.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-400-0",
+      "strategy": "paragraph",
+      "chunk_size": 400,
+      "overlap": 0,
+      "chunk_count": 633,
+      "avg_chars": 281.8,
+      "p50_chars": 323,
+      "max_chars": 400,
+      "queries_total": 145,
+      "queries_kept": 89,
+      "queries_dropped": 56,
+      "queries_ambiguous": 20,
+      "index_seconds": 23.5,
+      "vector": {
+        "recall@10": 0.764,
+        "mrr@10": 0.4932,
+        "ndcg@10": 0.5589,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 89,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.9551,
+        "mrr@10": 0.842,
+        "ndcg@10": 0.8699,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 89,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.8989,
+        "mrr@10": 0.6781,
+        "ndcg@10": 0.7314,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 33.0,
+        "evaluated": 89,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.908,
+          "mrr@10": 0.6822,
+          "ndcg@10": 0.7367,
+          "latency_p50_ms": 28.0,
+          "latency_p95_ms": 33.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-400-50",
+      "strategy": "paragraph",
+      "chunk_size": 400,
+      "overlap": 50,
+      "chunk_count": 640,
+      "avg_chars": 290.3,
+      "p50_chars": 329,
+      "max_chars": 400,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 27,
+      "index_seconds": 24.2,
+      "vector": {
+        "recall@10": 0.7419,
+        "mrr@10": 0.4996,
+        "ndcg@10": 0.5585,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.957,
+        "mrr@10": 0.8052,
+        "ndcg@10": 0.8428,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.8817,
+        "mrr@10": 0.647,
+        "ndcg@10": 0.7041,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.8851,
+          "mrr@10": 0.6399,
+          "ndcg@10": 0.6994,
+          "latency_p50_ms": 27.0,
+          "latency_p95_ms": 32.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-400-100",
+      "strategy": "paragraph",
+      "chunk_size": 400,
+      "overlap": 100,
+      "chunk_count": 658,
+      "avg_chars": 296.2,
+      "p50_chars": 329,
+      "max_chars": 400,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 26,
+      "index_seconds": 25.1,
+      "vector": {
+        "recall@10": 0.7419,
+        "mrr@10": 0.504,
+        "ndcg@10": 0.5618,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 31.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.957,
+        "mrr@10": 0.8099,
+        "ndcg@10": 0.8461,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.871,
+        "mrr@10": 0.648,
+        "ndcg@10": 0.7026,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.8736,
+          "mrr@10": 0.641,
+          "ndcg@10": 0.6978,
+          "latency_p50_ms": 28.0,
+          "latency_p95_ms": 32.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-600-50",
+      "strategy": "paragraph",
+      "chunk_size": 600,
+      "overlap": 50,
+      "chunk_count": 421,
+      "avg_chars": 431.4,
+      "p50_chars": 485,
+      "max_chars": 600,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 20,
+      "index_seconds": 19.3,
+      "vector": {
+        "recall@10": 0.6452,
+        "mrr@10": 0.428,
+        "ndcg@10": 0.4797,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.957,
+        "mrr@10": 0.8584,
+        "ndcg@10": 0.8826,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.8925,
+        "mrr@10": 0.5942,
+        "ndcg@10": 0.6644,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.8851,
+          "mrr@10": 0.5926,
+          "ndcg@10": 0.6614,
+          "latency_p50_ms": 26.0,
+          "latency_p95_ms": 31.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "p-800-50",
+      "strategy": "paragraph",
+      "chunk_size": 800,
+      "overlap": 50,
+      "chunk_count": 308,
+      "avg_chars": 585.3,
+      "p50_chars": 652,
+      "max_chars": 800,
+      "queries_total": 145,
+      "queries_kept": 93,
+      "queries_dropped": 52,
+      "queries_ambiguous": 19,
+      "index_seconds": 15.2,
+      "vector": {
+        "recall@10": 0.6237,
+        "mrr@10": 0.3301,
+        "ndcg@10": 0.3986,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.957,
+        "mrr@10": 0.8668,
+        "ndcg@10": 0.8894,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.8925,
+        "mrr@10": 0.5604,
+        "ndcg@10": 0.6404,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 93,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.8851,
+          "mrr@10": 0.5623,
+          "ndcg@10": 0.6401,
+          "latency_p50_ms": 25.0,
+          "latency_p95_ms": 31.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    },
+    {
+      "label": "f-400-50",
+      "strategy": "fixed",
+      "chunk_size": 400,
+      "overlap": 50,
+      "chunk_count": 536,
+      "avg_chars": 384.3,
+      "p50_chars": 399,
+      "max_chars": 400,
+      "queries_total": 145,
+      "queries_kept": 92,
+      "queries_dropped": 53,
+      "queries_ambiguous": 21,
+      "index_seconds": 20.2,
+      "vector": {
+        "recall@10": 0.7609,
+        "mrr@10": 0.4516,
+        "ndcg@10": 0.5254,
+        "latency_p50_ms": 28.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "bm25": {
+        "recall@10": 0.9565,
+        "mrr@10": 0.8225,
+        "ndcg@10": 0.8556,
+        "latency_p50_ms": 0.0,
+        "latency_p95_ms": 0.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "hybrid": {
+        "recall@10": 0.9239,
+        "mrr@10": 0.6298,
+        "ndcg@10": 0.7002,
+        "latency_p50_ms": 29.0,
+        "latency_p95_ms": 32.0,
+        "evaluated": 92,
+        "failures": 0
+      },
+      "common_subset": {
+        "size": 87,
+        "hybrid": {
+          "recall@10": 0.9195,
+          "mrr@10": 0.6239,
+          "ndcg@10": 0.6945,
+          "latency_p50_ms": 29.0,
+          "latency_p95_ms": 32.0,
+          "evaluated": 87,
+          "failures": 0
+        }
+      }
+    }
+  ],
+  "timestamp": "2026-11-10T16:05:04"
+}

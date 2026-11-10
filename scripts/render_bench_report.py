@@ -827,10 +827,193 @@ def section_rrf_weights(results_dir: Path) -> str:
     return "\n".join(lines)
 
 
+def section_chunking(results_dir: Path, top_k: int = 10) -> str:
+    """分块消融：改切法，看目标块排得靠不靠前。"""
+    raw = load_json(results_dir / "chunk-ablation.json")
+    if not raw or not raw.get("configs"):
+        return ""
+
+    protocol = raw.get("protocol", {})
+    configs = raw["configs"]
+    by_label = {c["label"]: c for c in configs}
+
+    def recall(entry: dict, mode: str = "hybrid") -> float:
+        return (entry.get(mode) or {}).get(f"recall@{top_k}", 0.0)
+
+    def mrr(entry: dict, mode: str = "hybrid") -> float:
+        return (entry.get(mode) or {}).get(f"mrr@{top_k}", 0.0)
+
+    def common_recall(entry: dict) -> float:
+        return ((entry.get("common_subset") or {}).get("hybrid")
+                or {}).get(f"recall@{top_k}", 0.0)
+
+    def common_mrr(entry: dict) -> float:
+        return ((entry.get("common_subset") or {}).get("hybrid")
+                or {}).get(f"mrr@{top_k}", 0.0)
+
+    common_size = protocol.get("common_subset", 0)
+    per_query = 100.0 / common_size if common_size else 0.0
+
+    lines = [
+        "## 九、分块消融",
+        "",
+        "切块是检索链路里最靠前、也最容易被拍脑袋决定的一步。",
+        "这一节回答一个问题：**块切多大、要不要重叠、按段落还是按固定窗口**。",
+        "",
+        "### 协议：只让切法变，别的一律不动",
+        "",
+        f"- **查询固定**：在基准配置（{protocol.get('base_config', 'paragraph/400/50')}）上取"
+        f"{protocol.get('query_count', 0)} 条**连续**文本片段当查询（种子 {protocol.get('seed', 42)}），"
+        "之后不再重新出题。",
+        "- **答案块重映射**：每个配置重新切块后，找回「包含该片段原文」的那个块作为正确答案。",
+        f"- 公共子集：只有 {common_size} 条查询在**所有配置里都能映射成功**"
+        "（其余的查询跨越了块边界，被切成了两半）。横向对比一律看公共子集。",
+        "- 中间几列（向量 / BM25 / hybrid）用的是各配置**自己**能映射的那批查询"
+        "（数量见「映射成功」列），所以只能看趋势；真正可横向比的是最后两列公共子集。",
+        f"- 拒答关闭（{protocol.get('abstention', 'disabled')}），否则空结果会污染 recall。",
+        "",
+        "### 块大小：MRR 一路涨到 300，再小就没有回报",
+        "",
+        f"| 块大小 | 块数 | 平均字数 | 映射成功 | 向量 recall@{top_k} | BM25 recall@{top_k} "
+        f"| hybrid recall@{top_k} | hybrid MRR | 公共子集 recall | 公共子集 MRR | 建索引(s) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    sizes = [c for c in configs
+             if c["strategy"] == "paragraph" and c["overlap"] == 50]
+    for entry in sorted(sizes, key=lambda c: c["chunk_size"]):
+        lines.append(
+            f"| {entry['chunk_size']} | {entry['chunk_count']:,} | {entry['avg_chars']} | "
+            f"{entry['queries_kept']}/{entry.get('queries_total', 0)} | "
+            f"{recall(entry, 'vector'):.4f} | {recall(entry, 'bm25'):.4f} | "
+            f"{recall(entry):.4f} | {mrr(entry):.4f} | "
+            f"{common_recall(entry):.4f} | {common_mrr(entry):.4f} | "
+            f"{entry['index_seconds']} |")
+
+    smallest = min(sizes, key=lambda c: c["chunk_size"])
+    largest = max(sizes, key=lambda c: c["chunk_size"])
+    best = max(sizes, key=lambda c: (common_recall(c), common_mrr(c)))
+
+    lines += [
+        "",
+        "**主结论：块越小，答案排得越靠前。**",
+        f"公共子集 MRR 从 {largest['chunk_size']} 的 {common_mrr(largest):.4f} "
+        f"升到 {best['chunk_size']} 的 {common_mrr(best):.4f}"
+        f"（{common_mrr(best) - common_mrr(largest):+.4f}）。"
+        "块的边界越紧，向量里被无关内容稀释得越少，正确答案就越靠前。",
+        "",
+        "**但 recall 不会一直涨。**"
+        f"从小块继续往下压，映射失败的查询开始变多"
+        f"（{smallest['chunk_size']} 时块数 {smallest['chunk_count']:,}、建索引 "
+        f"{smallest['index_seconds']} 秒），可报告的收益已经停止。",
+        "",
+        f"这批数据上的拐点在 **{best['chunk_size']}**：公共子集 recall "
+        f"{common_recall(best):.4f}、MRR {common_mrr(best):.4f} 都是最高，"
+        f"块数 {best['chunk_count']:,}、建索引 {best['index_seconds']} 秒。"
+        "（运行时默认值就是 300，见 `application.yml`。）",
+        "",
+        "### BM25 对切法几乎免疫",
+        "",
+        f"同一列里 BM25 的 recall 全程在 "
+        f"{min(recall(c, 'bm25') for c in sizes):.4f}～{max(recall(c, 'bm25') for c in sizes):.4f} 之间，"
+        f"而向量那侧从 {recall(smallest, 'vector'):.4f} 掉到 {recall(largest, 'vector'):.4f}。",
+        "",
+        "原因不难理解：BM25 只关心「查询里的词在不在这个块里」，块大块小都能匹配上；"
+        "向量那侧要把整块压成一个点，块里无关内容越多，这个点越不代表答案。",
+        "",
+        "**这也顺带解释了第七、八节的结论**：这批查询是「从原文里取句子」，"
+        "天然站在词面匹配那一边，所以混合检索的分数几乎被 BM25 拉平 —— "
+        "不是融合做错了，是评测协议决定的。",
+        "",
+        "### 重叠：没有收益，还有「分票」的代价",
+        "",
+        f"| 重叠 | 块数 | 映射成功 | 歧义块（查询命中多块） | hybrid recall@{top_k} "
+        f"| hybrid MRR | 公共子集 recall | 公共子集 MRR |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    overlapped = [c for c in configs
+                  if c["strategy"] == "paragraph" and c["chunk_size"] == 400]
+    for entry in sorted(overlapped, key=lambda c: c["overlap"]):
+        lines.append(
+            f"| {entry['overlap']} | {entry['chunk_count']:,} | "
+            f"{entry['queries_kept']}/{entry.get('queries_total', 0)} | "
+            f"{entry.get('queries_ambiguous', 0)} | {recall(entry):.4f} | {mrr(entry):.4f} | "
+            f"{common_recall(entry):.4f} | {common_mrr(entry):.4f} |")
+
+    if len(overlapped) >= 2:
+        no_overlap = min(overlapped, key=lambda c: c["overlap"])
+        most = max(overlapped, key=lambda c: c["overlap"])
+        lines += [
+            "",
+            f"重叠从 0 加到 {most['overlap']}，MRR 反而从 {common_mrr(no_overlap):.4f} "
+            f"降到 {common_mrr(most):.4f}，歧义块从 {no_overlap.get('queries_ambiguous', 0)} "
+            f"涨到 {most.get('queries_ambiguous', 0)}。",
+            "",
+            "一个合理的解释是**分票**：重叠让同一段话同时出现在相邻两块里，"
+            "两块内容几乎一样，谁排第一都有可能，正确答案被「自己」挤下去。",
+            "这个解释只和数据方向一致，没有单独做过验证，所以写成怀疑而不是结论。",
+            "",
+            "另外要注意：本项目实现里重叠**只对超长段落生效**"
+            "（`TextSplitter` 里只有硬切那条路径用到 `overlap`），"
+            "而这份语料的大部分段落远短于块大小，所以这个旋钮能起作用的范围本来就有限。",
+            "",
+            "### 段落切分 vs 固定窗口：结果和直觉相反",
+            "",
+            f"| 策略 | 块数 | 平均字数 | 映射成功 | hybrid recall@{top_k} | hybrid MRR "
+            f"| 公共子集 recall | 公共子集 MRR |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for label in ("p-400-50", "f-400-50"):
+            entry = by_label.get(label)
+            if not entry:
+                continue
+            name = "段内合并（默认）" if entry["strategy"] == "paragraph" else "固定窗口"
+            lines.append(
+                f"| {name} | {entry['chunk_count']:,} | {entry['avg_chars']} | "
+                f"{entry['queries_kept']}/{entry.get('queries_total', 0)} | "
+                f"{recall(entry):.4f} | {mrr(entry):.4f} | "
+                f"{common_recall(entry):.4f} | {common_mrr(entry):.4f} |")
+
+        para = by_label.get("p-400-50")
+        fixed = by_label.get("f-400-50")
+        if para and fixed:
+            better = fixed if common_recall(fixed) > common_recall(para) else para
+            worse = para if better is fixed else fixed
+            lines += [
+                "",
+                f"**固定窗口的 recall 反而更好**（{common_recall(fixed):.4f} vs "
+                f"{common_recall(para):.4f}），这与「按段落切能保持语义完整」的直觉相反。",
+                "",
+                "看起来合理的解释是：这份语料以代码为主，所谓「段落」大多只有一两行语句，"
+                f"按段落合并到块大小会把**不相邻**的语句拼成一块"
+                f"（平均长度只有 {para['avg_chars']} 字，而固定窗口是 {fixed['avg_chars']} 字）。"
+                "拼出来的块在向量空间里代表不了任何一段真实内容，而固定窗口至少保证块内的文字是连续的。",
+                "",
+                f"但差值只有 {(common_recall(better) - common_recall(worse)) * common_size:.0f} 条查询"
+                f"（约 {(common_recall(better) - common_recall(worse)) * 100:.1f} 个百分点，"
+                f"一条查询 = {per_query:.2f} 个百分点），**统计上不算显著**。"
+                "只能说方向一致，不足以据此改默认策略。",
+                "",
+            ]
+
+    lines += [
+        "### 这一节的边界",
+        "",
+        f"- **公共子集只有 {common_size} 条**，一条查询就值 {per_query:.2f} 个百分点，"
+        "两三个点的差距在噪声范围内。要看方向，不要看小数点后第三位。",
+        "- 查询取自原文（known-item），天然偏向词面匹配，"
+        "**不能由这节推出「小块对语义查询没用」** —— 语义查询只有 16 条样本，没在这里用。",
+        "- 只报了 recall/MRR，没报「用户要读多少字才能看到答案」。块越大，读到答案要翻的无关内容越多，"
+        "这个代价在指标里看不见。",
+        "- 语料是代码 + 技术文档，段落语义密度低；换成散文或长报告，段落切分很可能反超。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def section_method(recall: dict) -> str:
     """方法学与局限 —— 必须写，否则是在误导人。"""
     lines = [
-        "## 九、方法学与局限",
+        "## 十、方法学与局限",
         "",
         "### 数据是合成的，不是真实 embedding",
         "",
@@ -903,6 +1086,7 @@ def main() -> int:
         section_quantization(results_dir),
         section_hybrid(results_dir),
         section_rrf_weights(results_dir),
+        section_chunking(results_dir),
         section_method(recall),
     ) if s]
 
