@@ -3,34 +3,36 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "向量检索服务 —— 完整检索链路",
+    "subtitle": "Java 21 引擎 + Python 模型服务，双进程；索引与融合全部自研",
     "locale": "zh-CN",
-    "output": ".archify/architecture-vector-search-20261018-171500/vector-search.html",
-    "quality_profile": "showcase"
+    "output": ".archify/architecture-vector-search-20261110-153700/vector-search.html",
+    "quality_profile": "showcase",
+    "viewBox": [1230, 800]
   },
   "components": [
     {
       "id": "client",
       "type": "external",
       "label": "客户端",
-      "sublabel": "curl / demo 页面",
-      "pos": [20, 520],
-      "size": [130, 60]
+      "sublabel": "curl / 三页应用",
+      "pos": [20, 420],
+      "size": [110, 56]
     },
     {
       "id": "api",
-      "type": "backend",
+      "type": "security",
       "label": "REST 接口层",
-      "sublabel": "SearchController",
-      "pos": [230, 520],
-      "size": [160, 60]
+      "sublabel": "Controller · 可选 API Key",
+      "pos": [200, 412],
+      "size": [130, 72]
     },
     {
       "id": "service",
       "type": "backend",
       "label": "检索编排",
-      "sublabel": "编排两路召回与融合",
-      "pos": [470, 520],
-      "size": [180, 60]
+      "sublabel": "SearchService",
+      "pos": [390, 404],
+      "size": [165, 84]
     },
     {
       "id": "modelService",
@@ -38,72 +40,80 @@
       "label": "FastAPI 模型服务",
       "sublabel": "独立 Python 进程",
       "tag": ":8000",
-      "pos": [470, 100],
-      "size": [180, 60]
+      "pos": [560, 62],
+      "size": [185, 64]
     },
     {
       "id": "bge",
       "type": "backend",
       "label": "BGE-small-zh",
       "sublabel": "512 维 · 双塔",
-      "pos": [720, 100],
-      "size": [170, 60]
+      "pos": [800, 42],
+      "size": [175, 62]
     },
     {
       "id": "reranker",
       "type": "backend",
       "label": "BGE reranker",
       "sublabel": "单塔 · Cross-Encoder",
-      "pos": [720, 220],
-      "size": [170, 60]
+      "pos": [800, 162],
+      "size": [175, 62]
+    },
+    {
+      "id": "denseIdx",
+      "type": "backend",
+      "label": "HNSW 稠密索引",
+      "sublabel": "分层邻近图 · SIMD · f32 / SQ8",
+      "pos": [635, 330],
+      "size": [175, 76]
     },
     {
       "id": "sparseIdx",
       "type": "backend",
       "label": "BM25 稀疏索引",
       "sublabel": "二元组分词 · 倒排表",
-      "pos": [740, 400],
-      "size": [180, 70]
+      "pos": [635, 480],
+      "size": [175, 76]
     },
     {
-      "id": "denseIdx",
+      "id": "abstain",
       "type": "backend",
-      "label": "HNSW 稠密索引",
-      "sublabel": "自研 · 分层邻近图 · SIMD",
-      "pos": [740, 520],
-      "size": [180, 70]
+      "label": "拒答判定",
+      "sublabel": "两路原始分 · 任一过低即拒",
+      "pos": [860, 392],
+      "size": [150, 84]
     },
     {
       "id": "rrf",
       "type": "backend",
       "label": "RRF 融合",
-      "sublabel": "只看排名不看分数",
-      "pos": [1010, 465],
-      "size": [150, 60]
+      "sublabel": "加权 · 只看名次",
+      "pos": [1060, 320],
+      "size": [120, 72]
     },
     {
       "id": "rerank",
       "type": "backend",
       "label": "精排编排",
-      "sublabel": "applyRerank",
-      "pos": [1210, 465],
-      "size": [160, 60]
+      "sublabel": "cross-encoder 重排",
+      "pos": [1040, 470],
+      "size": [140, 72]
     },
     {
       "id": "docStore",
       "type": "database",
       "label": "文档原文",
-      "sublabel": "documents.jsonl",
-      "pos": [470, 680],
-      "size": [180, 60]
+      "sublabel": "documents.jsonl · 含墓碑",
+      "pos": [390, 660],
+      "size": [165, 62]
     },
     {
       "id": "snapshot",
       "type": "database",
       "label": "索引快照",
-      "sublabel": "vector-index.snapshot",
-      "pos": [740, 720],
-      "size": [180, 60]
+      "sublabel": "记录精度与量化刻度",
+      "pos": [635, 660],
+      "size": [175, 62]
     }
   ],
   "boundaries": [
@@ -111,7 +121,7 @@
       "kind": "region",
       "label": "Python 模型服务进程",
       "wraps": ["modelService", "bge", "reranker"],
-      "pad": 40
+      "pad": 36
     },
     {
       "kind": "region",
@@ -119,14 +129,15 @@
       "wraps": [
         "api",
         "service",
-        "sparseIdx",
         "denseIdx",
+        "sparseIdx",
+        "abstain",
         "rrf",
         "rerank",
         "docStore",
         "snapshot"
       ],
-      "pad": 40
+      "pad": 36
     }
   ],
   "connections": [
@@ -147,7 +158,7 @@
       "id": "service-to-model",
       "from": "service",
       "to": "modelService",
-      "label": "HTTP /embed /rerank",
+      "label": "HTTP /embed",
       "variant": "emphasis"
     },
     {
@@ -160,9 +171,7 @@
       "id": "model-to-reranker",
       "from": "modelService",
       "to": "reranker",
-      "label": "精排打分",
-      "fromSide": "bottom",
-      "toSide": "left"
+      "label": "精排打分"
     },
     {
       "id": "service-to-dense",
@@ -177,22 +186,26 @@
       "label": "稀疏召回"
     },
     {
-      "id": "dense-to-rrf",
+      "id": "dense-to-abstain",
       "from": "denseIdx",
-      "to": "rrf",
-      "label": "稠密候选"
+      "to": "abstain"
     },
     {
-      "id": "sparse-to-rrf",
+      "id": "sparse-to-abstain",
       "from": "sparseIdx",
+      "to": "abstain"
+    },
+    {
+      "id": "abstain-to-rrf",
+      "from": "abstain",
       "to": "rrf",
-      "label": "稀疏候选"
+      "label": "放行"
     },
     {
       "id": "rrf-to-rerank",
       "from": "rrf",
       "to": "rerank",
-      "label": "重排序"
+      "label": "候选池"
     },
     {
       "id": "service-to-docstore",
@@ -203,8 +216,8 @@
       "toSide": "top"
     },
     {
-      "id": "dense-to-snapshot",
-      "from": "denseIdx",
+      "id": "service-to-snapshot",
+      "from": "service",
       "to": "snapshot",
       "label": "落盘 / 恢复",
       "fromSide": "bottom",
@@ -216,37 +229,41 @@
       "dot": "cyan",
       "title": "一次检索走的路",
       "items": [
-        "客户端 → REST 接口 → 检索编排，然后同时走两条召回",
-        "两条召回的结果由 RRF 融合，再交给精排重新排序",
-        "响应携带分阶段耗时（编码 / 检索 / 融合），避免优化方向选错"
+        "客户端 → REST 接口 → 检索编排，查询向量由 Python 侧编码",
+        "同时走两条召回：HNSW 稠密 + BM25 稀疏，来源与删除判断都在遍历里完成",
+        "两路的最高原始分先过拒答判定，不达标直接返回空结果，不进入融合",
+        "达标才做加权 RRF 融合；开了精排再交给 cross-encoder 重排",
+        "响应带分阶段耗时（编码 / 检索 / 融合），免得把瓶颈找错地方"
       ]
     },
     {
       "dot": "emerald",
-      "title": "两条召回路线为什么都要",
+      "title": "两条召回为什么都要",
       "items": [
         "稠密擅长语义泛化：「内存回收」能匹配到「垃圾回收」",
         "稀疏擅长精确词：efSearch、HNSW 这类标识符只有它能精确命中",
-        "实测：词面查询 BM25 0.96 而向量 0.80；语义查询反转为 0.63 对 0.88"
+        "实测：词面查询 BM25 0.96 而向量 0.80；语义查询反转为 0.63 对 0.88",
+        "融合按名次而不按分数 —— 两路分数尺度不可比，加权后仍以名次为准"
       ]
     },
     {
       "dot": "amber",
-      "title": "精排为什么值得多花几百毫秒",
+      "title": "拒答为什么卡在融合之前",
       "items": [
-        "向量检索是双塔：查询与文档各自独立编码，编码时两者没见过彼此",
-        "cross-encoder 把两者拼在一起送进模型，能做完整的注意力交互",
-        "实测 MRR 提升 9% 至 14%，而召回率完全不变",
-        "默认关闭：质量与延迟的权衡应由业务决定，不该由框架替用户决定"
+        "RRF 的分是 1/(k+rank) 累加，k=60 时被压在 0.016~0.033 的窄带里",
+        "它衡量的是排名靠不靠前，跟相关不相关没关系 —— 拿它做阈值是拿错尺子",
+        "所以取融合之前的两路原始分：余弦有界可比，BM25 最高分随语料漂",
+        "实测负样本拒答率 84%，正样本零误拒；漏拒主要栽在词汇重叠"
       ]
     },
     {
       "dot": "slate",
-      "title": "持久化解决的不是「省事」",
+      "title": "持久化与运维",
       "items": [
-        "10 万条数据重建 HNSW 图要 113 秒，这是每次冷启动都要付的成本",
-        "二进制快照恢复只要 173 毫秒，加速 654 倍",
-        "BM25 不需要快照：从 documents.jsonl 重建即可，比建图便宜几个数量级"
+        "10 万条重建 HNSW 图要 113 秒，二进制快照恢复只要 173 毫秒",
+        "快照记录精度标记与量化刻度，否则读回来会用错的刻度解码",
+        "删除只打墓碑，占比到 10% 由后台单飞压实（活节点重建 + 清墓碑）",
+        "BM25 不需要快照：从 documents.jsonl 重建比建图便宜几个数量级"
       ]
     }
   ]
